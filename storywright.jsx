@@ -241,6 +241,310 @@ const SEED = {
   ],
 };
 
+// ─── STORY BIBLE CONVERTER ───────────────────────────────────────────────────
+
+function convertStoryBibleToOntology(storyBible) {
+  const uid = () => Math.random().toString(36).slice(2, 8);
+  
+  // Extract meta
+  const meta = {
+    title: storyBible.meta?.title || "",
+    subtitle: storyBible.meta?.subtitle || "",
+    coreStatement: storyBible.meta_thesis?.core_statement || "",
+    narrativeArgument: storyBible.meta_thesis?.narrative_argument || "",
+  };
+
+  // Convert primary themes to principles
+  const principles = (storyBible.thematic_engine?.primary_themes || []).map((theme, idx) => ({
+    id: `p${idx + 1}`,
+    name: theme.theme,
+    definition: theme.definition,
+    portability: "universal",
+    redundancy: 1, // Default, can be calculated later
+  }));
+
+  // Create principle name to ID mapping
+  const principleMap = {};
+  principles.forEach(p => { principleMap[p.name] = p.id; });
+
+  // Convert characters
+  const characterEntities = (storyBible.character_definitions?.core_cast || []).map((char, idx) => {
+    const entityId = `e${idx + 1}`;
+    // Map principles by name - check function_in_narrative, psychology, and relationship_to_protagonist
+    const servesPrinciples = [];
+    const checkText = [
+      char.function_in_narrative || "",
+      char.psychology || "",
+      char.relationship_to_protagonist || char.relationship_to_morrow || "",
+    ].join(" ").toLowerCase();
+    
+    principles.forEach(p => {
+      const themeName = p.name.toLowerCase();
+      // Check if theme name appears in any of the character's text fields
+      if (checkText.includes(themeName)) {
+        if (!servesPrinciples.includes(p.id)) servesPrinciples.push(p.id);
+      }
+    });
+    
+    // Extract arc from protagonist_architecture or character arc
+    const arc = [];
+    const isProtagonist = storyBible.protagonist_architecture && 
+      (char.name === storyBible.protagonist_architecture.name || 
+       char.name.toLowerCase().includes(storyBible.protagonist_architecture.name?.toLowerCase() || ""));
+    
+    if (isProtagonist && storyBible.protagonist_architecture.arc_logic) {
+      // Protagonist arc from arc_logic - extract state and movement
+      const arcLogic = storyBible.protagonist_architecture.arc_logic;
+      const parseArcState = (text) => {
+        if (!text) return { state: "", movement: "" };
+        const parts = text.split("—").map(s => s.trim());
+        return { state: parts[0] || "", movement: parts[1] || "" };
+      };
+      if (arcLogic.act_one) {
+        const parsed = parseArcState(arcLogic.act_one);
+        arc.push({ act: 1, state: parsed.state, movement: parsed.movement });
+      }
+      if (arcLogic.act_two) {
+        const parsed = parseArcState(arcLogic.act_two);
+        arc.push({ act: 2, state: parsed.state, movement: parsed.movement });
+      }
+      if (arcLogic.act_three) {
+        const parsed = parseArcState(arcLogic.act_three);
+        arc.push({ act: 3, state: parsed.state, movement: parsed.movement });
+      }
+      if (arcLogic.act_four) {
+        const parsed = parseArcState(arcLogic.act_four);
+        arc.push({ act: 4, state: parsed.state, movement: parsed.movement });
+      }
+      if (arcLogic.act_five) {
+        const parsed = parseArcState(arcLogic.act_five);
+        arc.push({ act: 5, state: parsed.state, movement: parsed.movement });
+      }
+    } else if (char.key_scenes && char.key_scenes.length > 0) {
+      // Extract arc from key_scenes by matching to acts
+      const acts = storyBible.narrative_structure?.acts || [];
+      acts.forEach(act => {
+        const matchingScenes = char.key_scenes.filter(scene => {
+          const sceneLower = scene.toLowerCase();
+          const episodeRange = act.episodes || "";
+          const episodeStart = episodeRange.split("-")[0]?.trim() || episodeRange.split("–")[0]?.trim() || "";
+          return sceneLower.includes(`act ${act.act_number}`) || 
+                 sceneLower.includes(`act ${act.act_number === 1 ? "one" : act.act_number === 2 ? "two" : act.act_number === 3 ? "three" : act.act_number === 4 ? "four" : "five"}`) ||
+                 (episodeStart && sceneLower.includes(`episode ${episodeStart}`)) ||
+                 (act.act_number === 1 && (sceneLower.includes("first") || sceneLower.includes("opening"))) ||
+                 (act.act_number === 5 && (sceneLower.includes("final") || sceneLower.includes("trial") || sceneLower.includes("execution")));
+        });
+        if (matchingScenes.length > 0) {
+          // Extract state from scene description
+          const sceneText = matchingScenes[0];
+          const stateMatch = sceneText.match(/(.+?)(?:—|–|:)/);
+          const state = stateMatch ? stateMatch[1].trim() : sceneText.substring(0, 50);
+          arc.push({ act: act.act_number, state, movement: "" });
+        }
+      });
+    } else if (char.arc) {
+      // Extract arc from character arc description text
+      const arcText = char.arc.toLowerCase();
+      if (arcText.includes("act 1") || arcText.includes("act one") || arcText.includes("first")) arc.push({ act: 1, state: "", movement: "" });
+      if (arcText.includes("act 2") || arcText.includes("act two") || arcText.includes("second")) arc.push({ act: 2, state: "", movement: "" });
+      if (arcText.includes("act 3") || arcText.includes("act three") || arcText.includes("third")) arc.push({ act: 3, state: "", movement: "" });
+      if (arcText.includes("act 4") || arcText.includes("act four") || arcText.includes("fourth")) arc.push({ act: 4, state: "", movement: "" });
+      if (arcText.includes("act 5") || arcText.includes("act five") || arcText.includes("fifth") || arcText.includes("trial")) arc.push({ act: 5, state: "", movement: "" });
+    }
+
+    // Extract shadow architecture if protagonist
+    let shadow = null;
+    
+    if (storyBible.jungian_shadow_architecture && isProtagonist) {
+      shadow = {};
+      (storyBible.jungian_shadow_architecture.shadow_contents || []).forEach(shadowItem => {
+        // Map shadow quality to principle by finding principle mentioned in trigger or projection
+        let triggerPrincipleId = null;
+        const triggerText = (shadowItem.primary_trigger_character || shadowItem.projection_pattern || "").toLowerCase();
+        principles.forEach(p => {
+          if (triggerText.includes(p.name.toLowerCase())) {
+            triggerPrincipleId = p.id;
+          }
+        });
+        // If no match found, try to match by theme keywords
+        if (!triggerPrincipleId) {
+          const qualityText = shadowItem.disowned_quality?.toLowerCase() || "";
+          principles.forEach(p => {
+            const defLower = p.definition.toLowerCase();
+            if (qualityText.includes("dependency") && defLower.includes("license")) triggerPrincipleId = p.id;
+            else if (qualityText.includes("ordinary") && defLower.includes("portrait")) triggerPrincipleId = p.id;
+            else if (qualityText.includes("approval") && defLower.includes("mirror")) triggerPrincipleId = p.id;
+            else if (qualityText.includes("cruelty") && defLower.includes("mirror")) triggerPrincipleId = p.id;
+          });
+        }
+        if (triggerPrincipleId) {
+          shadow[shadowItem.disowned_quality.toLowerCase().replace(/\s+/g, "")] = triggerPrincipleId;
+        }
+      });
+      if (Object.keys(shadow).length === 0) shadow = null;
+    }
+
+    return {
+      id: entityId,
+      name: char.name,
+      type: "character",
+      layer: "institutional",
+      role: char.function_in_narrative || char.role || "",
+      psychology: char.psychology || "",
+      servesPrinciples,
+      arc,
+      shadow,
+    };
+  });
+
+  // Convert factions
+  const factionEntities = (storyBible.faction_definitions?.factions || []).map((faction, idx) => {
+    const entityId = `e${characterEntities.length + idx + 1}`;
+    const servesPrinciples = [];
+    if (faction.structural_role) {
+      principles.forEach(p => {
+        if (faction.structural_role.toLowerCase().includes(p.name.toLowerCase()) ||
+            faction.character?.toLowerCase().includes(p.name.toLowerCase())) {
+          if (!servesPrinciples.includes(p.id)) servesPrinciples.push(p.id);
+        }
+      });
+    }
+    return {
+      id: entityId,
+      name: faction.name,
+      type: "faction",
+      layer: "institutional",
+      role: faction.structural_role || faction.archetype || "",
+      psychology: faction.character || "",
+      servesPrinciples,
+      arc: [],
+      shadow: null,
+    };
+  });
+
+  // Convert locations
+  const locationEntities = [];
+  if (storyBible.world_building?.geography) {
+    Object.entries(storyBible.world_building.geography).forEach(([key, location], idx) => {
+      const entityId = `e${characterEntities.length + factionEntities.length + idx + 1}`;
+      const locationName = typeof location === "string" ? location.split("—")[0]?.trim() || key : key;
+      locationEntities.push({
+        id: entityId,
+        name: locationName,
+        type: "location",
+        layer: "institutional",
+        role: typeof location === "string" ? location : "",
+        psychology: "",
+        servesPrinciples: [],
+        arc: [],
+        shadow: null,
+      });
+    });
+  }
+
+  // Convert instruments
+  const instrumentEntities = [];
+  if (storyBible.world_building?.key_instruments) {
+    Object.entries(storyBible.world_building.key_instruments).forEach(([key, instrument], idx) => {
+      const entityId = `e${characterEntities.length + factionEntities.length + locationEntities.length + idx + 1}`;
+      instrumentEntities.push({
+        id: entityId,
+        name: instrument.name || key,
+        type: "instrument",
+        layer: "institutional",
+        role: instrument.narrative_function || instrument.critical_function || "",
+        psychology: instrument.description || "",
+        servesPrinciples: [],
+        arc: [],
+        shadow: null,
+      });
+    });
+  }
+
+  const entities = [...characterEntities, ...factionEntities, ...locationEntities, ...instrumentEntities];
+  const entityMap = {};
+  entities.forEach(e => { entityMap[e.name] = e.id; });
+
+  // Convert relationships
+  const relationships = (storyBible.relationship_matrix?.relationships || []).map((rel, idx) => {
+    // Handle "Morrow ↔ Caine" or "Morrow — Caine" format
+    const pairMatch = rel.pair.match(/(.+?)\s*[↔—]\s*(.+)/);
+    if (!pairMatch) return null;
+    let sourceName = pairMatch[1].trim();
+    let targetName = pairMatch[2].trim();
+    
+    // Handle protagonist name variations (e.g., "Morrow" vs "Cassian Morrow")
+    const protagonistName = storyBible.protagonist_architecture?.name || "";
+    if (sourceName === "Morrow" && protagonistName) sourceName = protagonistName;
+    if (targetName === "Morrow" && protagonistName) targetName = protagonistName;
+    
+    // Try exact match first, then partial match
+    let sourceId = entityMap[sourceName];
+    let targetId = entityMap[targetName];
+    
+    if (!sourceId) {
+      // Try partial match
+      const sourceMatch = Object.keys(entityMap).find(name => 
+        name.toLowerCase().includes(sourceName.toLowerCase()) || 
+        sourceName.toLowerCase().includes(name.toLowerCase())
+      );
+      if (sourceMatch) sourceId = entityMap[sourceMatch];
+    }
+    
+    if (!targetId) {
+      const targetMatch = Object.keys(entityMap).find(name => 
+        name.toLowerCase().includes(targetName.toLowerCase()) || 
+        targetName.toLowerCase().includes(name.toLowerCase())
+      );
+      if (targetMatch) targetId = entityMap[targetMatch];
+    }
+    
+    if (!sourceId || !targetId) return null;
+    
+    // Infer tension from trajectory keywords
+    let tension = 0.5;
+    const trajectory = (rel.trajectory || "").toLowerCase();
+    const dynamic = (rel.dynamic || "").toLowerCase();
+    if (trajectory.includes("opposition") || trajectory.includes("conflict") || trajectory.includes("rivalry") || dynamic.includes("rivalry")) tension = 0.8;
+    else if (trajectory.includes("friendship") || trajectory.includes("bond") || trajectory.includes("respect") || dynamic.includes("friendship")) tension = 0.4;
+    else if (trajectory.includes("departure") || trajectory.includes("grief") || trajectory.includes("devastation") || dynamic.includes("intimate")) tension = 0.9;
+    else if (trajectory.includes("testimony") || trajectory.includes("conviction")) tension = 0.7;
+    
+    return {
+      id: `r${idx + 1}`,
+      source: sourceId,
+      target: targetId,
+      type: rel.type || "",
+      dynamic: rel.dynamic || "",
+      tension,
+      trajectory: rel.trajectory || "",
+    };
+  }).filter(Boolean);
+
+  // Convert acts
+  const acts = (storyBible.narrative_structure?.acts || []).map(act => ({
+    number: act.act_number,
+    title: act.title || "",
+    episodes: act.episodes || "",
+    tone: act.tone || "",
+    question: act.central_question || act.morrow_state?.split(".")[0] || "",
+  }));
+
+  // Extract expressions from various sections (simplified - would need more parsing)
+  const expressions = [];
+  // Could extract from protagonist_expression_guide, key_scenes, etc.
+  // For now, leave empty as expressions are more complex to extract
+
+  return {
+    meta,
+    principles,
+    entities,
+    relationships,
+    acts,
+    expressions,
+  };
+}
+
 // ─── CONTEXT BUILDER ─────────────────────────────────────────────────────────
 
 function buildContext(state) {
@@ -1687,7 +1991,25 @@ export default function Storywright() {
     input.onchange = e => {
       const file = e.target.files[0]; if (!file) return;
       const reader = new FileReader();
-      reader.onload = ev => { try { const data = JSON.parse(ev.target.result); if (data.principles && data.entities) { dispatch({ type: "LOAD_STATE", state: data }); setMessages([]); } } catch {} };
+      reader.onload = ev => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          // Check if it's a Story Bible format (has meta_thesis or thematic_engine)
+          if (data.meta_thesis || data.thematic_engine) {
+            const converted = convertStoryBibleToOntology(data);
+            dispatch({ type: "LOAD_STATE", state: converted });
+            setMessages([]);
+          } else if (data.principles && data.entities) {
+            // Standard ontology format
+            dispatch({ type: "LOAD_STATE", state: data });
+            setMessages([]);
+          } else {
+            alert("Invalid file format. Please import a Story Bible JSON or Storywright ontology JSON.");
+          }
+        } catch (err) {
+          alert("Error parsing JSON file: " + err.message);
+        }
+      };
       reader.readAsText(file);
     };
     input.click();
@@ -1753,6 +2075,16 @@ export default function Storywright() {
             <button onClick={handleNew} style={btnStyle(false)}>New</button>
             <button onClick={handleExport} style={btnStyle(false)}>Export</button>
             <button onClick={handleImport} style={btnStyle(false)}>Import</button>
+            {undoState.past.length > 0 && (
+              <button onClick={() => dispatch({ type: "UNDO" })} style={btnStyle(false)} title="Undo (Cmd+Z)">
+                ↶ Undo
+              </button>
+            )}
+            {undoState.future.length > 0 && (
+              <button onClick={() => dispatch({ type: "REDO" })} style={btnStyle(false)} title="Redo (Cmd+Shift+Z)">
+                ↷ Redo
+              </button>
+            )}
             <div style={{ width: "1px", height: "16px", background: theme.borderBezel, margin: "0 2px" }} />
             <button onClick={() => setShowApiKeyModal(true)} style={{
               ...btnStyle(false),
