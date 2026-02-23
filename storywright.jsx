@@ -384,7 +384,7 @@ function proposalToActions(proposal, state) {
 
 // ─── UTILITY COMPONENTS (theme-aware via useT) ──────────────────────────────
 
-function EditableText({ value, onChange, style, multiline, placeholder, isWork }) {
+function EditableText({ value, onChange, style, multiline, placeholder, isWork, onClick }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -397,12 +397,13 @@ function EditableText({ value, onChange, style, multiline, placeholder, isWork }
       <El ref={ref} value={draft} onChange={e => setDraft(e.target.value)}
         onBlur={() => { setEditing(false); if (draft !== value) onChange(draft); }}
         onKeyDown={e => { if (e.key === "Enter" && !multiline) { setEditing(false); if (draft !== value) onChange(draft); } if (e.key === "Escape") { setEditing(false); setDraft(value); } }}
+        onClick={onClick}
         style={{ ...style, background: t.bgInputFocus, border: `1px solid ${t.blue}`, borderRadius: "3px", outline: "none", color: t.textWork, fontFamily: isWork ? "var(--font-work)" : "inherit", fontSize: "inherit", fontWeight: "inherit", fontStyle: "inherit", padding: "2px 5px", width: "100%", resize: multiline ? "vertical" : "none", minHeight: multiline ? "60px" : "auto", boxSizing: "border-box" }}
         placeholder={placeholder} />
     );
   }
   return (
-    <span onClick={() => setEditing(true)}
+    <span onClick={(e) => { if (onClick) onClick(e); setEditing(true); }}
       style={{ ...style, cursor: "text", borderBottom: `1px dashed ${t.borderBezel}`, paddingBottom: "1px", minHeight: "1em", display: "inline-block", minWidth: "40px" }}
       title="Click to edit">
       {value || <span style={{ color: t.textUiGhost, fontStyle: "italic" }}>{placeholder || "click to edit"}</span>}
@@ -907,44 +908,44 @@ function ArcTimeline({ state, selectedEntity, onSelectEntity, dispatch }) {
   if (state.acts.length === 0) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: t.textUiGhost, fontSize: "13px", fontFamily: "var(--font-work)", fontStyle: "italic" }}>No acts defined yet</div>;
 
   return (
-    <div style={{ padding: "20px 24px", overflowY: "auto", height: "100%", background: t.bgCanvas }}>
-      <div style={{ display: "flex", gap: 0, marginBottom: "20px", borderBottom: `1px solid ${t.borderBezel}`, paddingBottom: "14px" }}>
-        <div style={{ width: "150px", flexShrink: 0 }} />
+    <div style={{ padding: "22px 26px", overflowY: "auto", height: "100%", background: t.bgCanvas }}>
+      <div style={{ display: "flex", gap: 0, marginBottom: "22px", borderBottom: `1px solid ${t.borderBezel}`, paddingBottom: "15px" }}>
+        <div style={{ width: "165px", flexShrink: 0 }} />
         {state.acts.map(act => (
-          <div key={act.number} style={{ flex: 1, padding: "6px 12px", borderLeft: `1px solid ${t.borderBezel}` }}>
-            <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "4px" }}>ACT {act.number}</div>
+          <div key={act.number} style={{ flex: 1, padding: "7px 13px", borderLeft: `1px solid ${t.borderBezel}` }}>
+            <div style={{ fontSize: "10px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "4px" }}>ACT {act.number}</div>
             <EditableText value={act.title} onChange={v => dispatch({ type: "UPDATE_ACT", number: act.number, data: { title: v } })}
-              style={{ fontSize: "14px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600 }} isWork />
-            <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.5, marginTop: "3px" }}>{act.question}</div>
-            <div style={{ fontSize: "10px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginTop: "4px", fontStyle: "italic" }}>{act.tone}</div>
+              style={{ fontSize: "15px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600 }} isWork />
+            <div style={{ fontSize: "12px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.5, marginTop: "3px" }}>{act.question}</div>
+            <div style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginTop: "4px", fontStyle: "italic" }}>{act.tone}</div>
           </div>
         ))}
       </div>
       {displayed.map(entity => (
-        <div key={entity.id} style={{ marginBottom: "12px", cursor: "pointer" }} onClick={() => onSelectEntity(selectedEntity === entity.id ? null : entity.id)}>
+        <div key={entity.id} style={{ marginBottom: "13px", cursor: "pointer" }} onClick={() => onSelectEntity(selectedEntity === entity.id ? null : entity.id)}>
           <div style={{ display: "flex", gap: 0 }}>
-            <div style={{ width: "150px", flexShrink: 0, paddingRight: "12px", paddingTop: "4px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ color: entity.type === "location" ? t.red : t.blue, fontSize: "11px" }}>{TYPE_ICON[entity.type]}</span>
-                <span style={{ fontSize: "12px", color: selectedEntity === entity.id ? t.textUiStrong : t.textUi, fontFamily: "var(--font-work)", fontWeight: 600 }}>{entity.name}</span>
+            <div style={{ width: "165px", flexShrink: 0, paddingRight: "13px", paddingTop: "4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                <span style={{ color: entity.type === "location" ? t.red : t.blue, fontSize: "12px" }}>{TYPE_ICON[entity.type]}</span>
+                <span style={{ fontSize: "13px", color: selectedEntity === entity.id ? t.textUiStrong : t.textUi, fontFamily: "var(--font-work)", fontWeight: 600 }}>{entity.name}</span>
               </div>
-              <div style={{ fontSize: "10px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginTop: "2px", marginLeft: "17px" }}>{entity.role.split("—")[0].trim()}</div>
+              <div style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginTop: "2px", marginLeft: "19px" }}>{entity.role.split("—")[0].trim()}</div>
             </div>
             {state.acts.map(act => {
               const ap = entity.arc?.find(a => a.act === act.number);
               return (
                 <div key={act.number} style={{
-                  flex: 1, padding: "6px 10px", minHeight: "46px", borderLeft: `1px solid ${t.borderBezel}`,
+                  flex: 1, padding: "7px 11px", minHeight: "51px", borderLeft: `1px solid ${t.borderBezel}`,
                   background: ap ? (selectedEntity === entity.id ? t.blueTint : t.bgHover) : "transparent",
                   borderRadius: "3px", transition: "all 0.2s",
                 }}>
                   {ap ? (
                     <>
-                      <div style={{ fontSize: "11px", color: t.blue, fontFamily: "var(--font-ui)", fontWeight: 600, marginBottom: "2px" }}>{ap.state}</div>
-                      <div style={{ fontSize: "10px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.3 }}>{ap.movement}</div>
+                      <div style={{ fontSize: "12px", color: t.blue, fontFamily: "var(--font-ui)", fontWeight: 600, marginBottom: "2px" }}>{ap.state}</div>
+                      <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.3 }}>{ap.movement}</div>
                     </>
                   ) : (
-                    <div style={{ width: "100%", height: "1px", background: t.borderBezel, marginTop: "20px", opacity: 0.5 }} />
+                    <div style={{ width: "100%", height: "1px", background: t.borderBezel, marginTop: "22px", opacity: 0.5 }} />
                   )}
                 </div>
               );
@@ -1115,6 +1116,246 @@ function CoherenceView({ state }) {
   );
 }
 
+// ─── COMPENDIUM VIEW ─────────────────────────────────────────────────────────
+
+function CompendiumView({ state, dispatch, onSelectEntity }) {
+  const t = useT();
+  const [expanded, setExpanded] = useState({});
+
+  const toggleExpanded = useCallback((id) => {
+    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  const entityTypes = [
+    { type: "character", label: "CHARACTERS", icon: "◉" },
+    { type: "faction", label: "FACTIONS", icon: "⬡" },
+    { type: "location", label: "LOCATIONS", icon: "◇" },
+    { type: "instrument", label: "INSTRUMENTS", icon: "⬢" },
+  ];
+
+  return (
+    <div style={{ padding: "24px", overflowY: "auto", height: "100%", background: t.bgCanvas }}>
+      {entityTypes.map(({ type, label, icon }) => {
+        const entities = state.entities.filter(e => e.type === type);
+        if (entities.length === 0) return null;
+
+        return (
+          <div key={type} style={{ marginBottom: "32px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
+              <span style={{ fontSize: "12px", color: t.blue }}>{icon}</span>
+              <span style={{ fontSize: "10px", color: t.blue, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "2px" }}>{label}</span>
+              <span style={{ fontSize: "10px", color: t.textUiLight, fontFamily: "var(--font-ui)" }}>({entities.length})</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {entities.map(entity => {
+                const isExpanded = expanded[entity.id];
+                const principles = state.principles.filter(p => entity.servesPrinciples.includes(p.id));
+                const relationships = state.relationships.filter(r => r.source === entity.id || r.target === entity.id);
+                const expressions = state.expressions.filter(x => x.character === entity.id || x.servesEntity === entity.id);
+                const arcBeats = entity.arc || [];
+
+                return (
+                  <div key={entity.id} style={{ background: t.bgPane, border: `1px solid ${t.borderBezel}`, borderRadius: "4px", overflow: "hidden" }}>
+                    {/* Header - Clickable */}
+                    <div
+                      onClick={() => toggleExpanded(entity.id)}
+                      style={{
+                        padding: "12px 16px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={ev => ev.currentTarget.style.background = t.bgHover}
+                      onMouseLeave={ev => ev.currentTarget.style.background = t.bgPane}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: "12px", color: t.blue }}>{TYPE_ICON[entity.type]}</span>
+                        <EditableText
+                          value={entity.name}
+                          onChange={v => {
+                            dispatch({ type: "UPDATE_ENTITY", id: entity.id, data: { name: v } });
+                            if (onSelectEntity) onSelectEntity(entity.id);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            fontSize: "14px",
+                            color: t.textWork,
+                            fontFamily: "var(--font-work)",
+                            fontWeight: 600,
+                            flex: 1,
+                            minWidth: 0,
+                          }}
+                          isWork
+                        />
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Badge color={t.blue} small>{principles.length}p</Badge>
+                        <Badge color={t.red} small>{relationships.length}r</Badge>
+                        <Badge color={t.red} small>{expressions.length}x</Badge>
+                        <span style={{ fontSize: "12px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginLeft: "4px" }}>
+                          {isExpanded ? "▼" : "▶"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Expanded Content */}
+                    {isExpanded && (
+                      <div style={{ padding: "16px", borderTop: `1px solid ${t.borderBezel}`, background: t.bgCanvas }}>
+                        {/* Overview */}
+                        <div style={{ marginBottom: "16px" }}>
+                          <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1px", marginBottom: "6px" }}>OVERVIEW</div>
+                          <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", marginBottom: "4px", fontWeight: 500 }}>{entity.role}</div>
+                          <EditableText
+                            value={entity.psychology}
+                            onChange={v => dispatch({ type: "UPDATE_ENTITY", id: entity.id, data: { psychology: v } })}
+                            multiline
+                            style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.5 }}
+                            isWork
+                            placeholder="Internal logic and motivation..."
+                          />
+                        </div>
+
+                        {/* Principles Served */}
+                        {principles.length > 0 && (
+                          <div style={{ marginBottom: "16px" }}>
+                            <div style={{ fontSize: "9px", color: t.yellow, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1px", marginBottom: "6px" }}>PRINCIPLES</div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                              {principles.map(p => (
+                                <div
+                                  key={p.id}
+                                  onClick={() => onSelectEntity && onSelectEntity(null)}
+                                  style={{
+                                    padding: "4px 8px",
+                                    background: t.yellowTint,
+                                    border: `1px solid ${t.borderBezel}`,
+                                    borderRadius: "3px",
+                                    fontSize: "10px",
+                                    color: t.textWork,
+                                    fontFamily: "var(--font-work)",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  {p.name}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Relationships */}
+                        {relationships.length > 0 && (
+                          <div style={{ marginBottom: "16px" }}>
+                            <div style={{ fontSize: "9px", color: t.blue, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1px", marginBottom: "6px" }}>RELATIONSHIPS</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                              {relationships.map(rel => {
+                                const other = state.entities.find(e => e.id === (rel.source === entity.id ? rel.target : rel.source));
+                                if (!other) return null;
+                                return (
+                                  <div
+                                    key={rel.id}
+                                    onClick={() => onSelectEntity && onSelectEntity(other.id)}
+                                    style={{
+                                      padding: "8px 10px",
+                                      background: t.bgPane,
+                                      border: `1px solid ${t.borderBezel}`,
+                                      borderRadius: "3px",
+                                      cursor: "pointer",
+                                      transition: "border-color 0.15s",
+                                    }}
+                                    onMouseEnter={ev => ev.currentTarget.style.borderColor = t.blue}
+                                    onMouseLeave={ev => ev.currentTarget.style.borderColor = t.borderBezel}
+                                  >
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                                      <span style={{ fontSize: "11px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 500 }}>
+                                        {rel.source === entity.id ? "→" : "←"} {other.name}
+                                      </span>
+                                      <Badge color={t.blue} small>{Math.round(rel.tension * 100)}%</Badge>
+                                    </div>
+                                    <div style={{ fontSize: "10px", color: t.textUi, fontFamily: "var(--font-work)", marginBottom: "2px" }}>{rel.type}</div>
+                                    <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-work)", fontStyle: "italic" }}>{rel.dynamic}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Arc Timeline */}
+                        {arcBeats.length > 0 && (
+                          <div style={{ marginBottom: "16px" }}>
+                            <div style={{ fontSize: "9px", color: t.blue, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1px", marginBottom: "6px" }}>ARC PROGRESSION</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                              {arcBeats.map((beat, idx) => (
+                                <div key={idx} style={{ padding: "6px 10px", background: t.bgPane, border: `1px solid ${t.borderBezel}`, borderRadius: "3px" }}>
+                                  <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, marginBottom: "2px" }}>ACT {beat.act}</div>
+                                  <div style={{ fontSize: "11px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 500, marginBottom: "2px" }}>{beat.state}</div>
+                                  <div style={{ fontSize: "10px", color: t.textUi, fontFamily: "var(--font-work)", fontStyle: "italic" }}>{beat.movement}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Expressions */}
+                        {expressions.length > 0 && (
+                          <div style={{ marginBottom: "16px" }}>
+                            <div style={{ fontSize: "9px", color: t.red, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1px", marginBottom: "6px" }}>EXPRESSIONS</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                              {expressions.map(expr => (
+                                <div key={expr.id} style={{ padding: "8px 10px", background: t.redTint, border: `1px solid ${t.borderBezel}`, borderRadius: "3px" }}>
+                                  <div style={{ fontSize: "10px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginBottom: "4px" }}>
+                                    {expr.type} {expr.act && `· Act ${expr.act}`} {expr.portability && `· ${expr.portability}`}
+                                  </div>
+                                  <div style={{ fontSize: "11px", color: t.textWork, fontFamily: "var(--font-work)", lineHeight: 1.4, fontStyle: "italic", marginBottom: "2px" }}>
+                                    "{expr.content}"
+                                  </div>
+                                  {expr.note && (
+                                    <div style={{ fontSize: "9px", color: t.textUi, fontFamily: "var(--font-work)" }}>{expr.note}</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Shadow Architecture */}
+                        {entity.shadow && Object.keys(entity.shadow).length > 0 && (
+                          <div>
+                            <div style={{ fontSize: "9px", color: t.red, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1px", marginBottom: "6px" }}>SHADOW ARCHITECTURE</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              {Object.entries(entity.shadow).map(([quality, trigger]) => {
+                                const triggerPrinciple = state.principles.find(p => p.id === trigger);
+                                return (
+                                  <div key={quality} style={{ padding: "6px 10px", background: t.redTint, border: `1px solid ${t.borderBezel}`, borderRadius: "3px" }}>
+                                    <div style={{ fontSize: "10px", color: t.textWork, fontFamily: "var(--font-work)", textTransform: "capitalize" }}>
+                                      {quality.replace(/([A-Z])/g, " $1").trim()}
+                                    </div>
+                                    {triggerPrinciple && (
+                                      <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-work)", fontStyle: "italic", marginTop: "2px" }}>
+                                        via {triggerPrinciple.name}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── INSPECTOR PANEL ─────────────────────────────────────────────────────────
 
 function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelectEntity, onSelectPrinciple }) {
@@ -1177,10 +1418,12 @@ function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelec
   return (
     <div style={{ padding: "16px", overflowY: "auto", height: "100%" }}>
       <div style={{ fontSize: "9px", color: t.blue, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "2px", marginBottom: "4px" }}>{entity.type.toUpperCase()} — INSTITUTIONAL</div>
-      <EditableText value={entity.name} onChange={v => dispatch({ type: "UPDATE_ENTITY", id: entity.id, data: { name: v } })}
-        style={{ fontSize: "16px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600, display: "block", marginBottom: "3px" }} isWork />
-      <EditableText value={entity.role} onChange={v => dispatch({ type: "UPDATE_ENTITY", id: entity.id, data: { role: v } })}
-        style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", fontStyle: "italic", display: "block", marginBottom: "14px" }} isWork />
+      <div style={{ display: "flex", alignItems: "baseline", gap: "8px", marginBottom: "14px", flexWrap: "wrap" }}>
+        <EditableText value={entity.name} onChange={v => dispatch({ type: "UPDATE_ENTITY", id: entity.id, data: { name: v } })}
+          style={{ fontSize: "16px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600 }} isWork />
+        <EditableText value={entity.role} onChange={v => dispatch({ type: "UPDATE_ENTITY", id: entity.id, data: { role: v } })}
+          style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", fontStyle: "italic" }} isWork />
+      </div>
       <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "4px" }}>PSYCHOLOGY</div>
       <EditableText value={entity.psychology} multiline onChange={v => dispatch({ type: "UPDATE_ENTITY", id: entity.id, data: { psychology: v } })}
         style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", lineHeight: "1.6", display: "block", padding: "10px 12px", background: t.bgCanvas, border: `1px solid ${t.borderBezel}`, borderRadius: "4px", marginBottom: "18px" }} isWork />
@@ -1204,9 +1447,11 @@ function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelec
             const other = state.entities.find(e => e.id === otherId);
             return (
               <div key={rel.id} style={{ marginBottom: "10px", padding: "10px 12px", background: t.bgCanvas, borderRadius: "4px", border: `1px solid ${t.borderBezel}`, borderLeft: `3px solid ${t.tension(rel.tension)}` }}>
-                <span onClick={() => onSelectEntity(otherId)} style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", cursor: "pointer", fontWeight: 500 }}>↔ {other?.name}</span>
-                <EditableText value={rel.type} onChange={v => dispatch({ type: "UPDATE_RELATIONSHIP", id: rel.id, data: { type: v } })}
-                  style={{ fontSize: "11px", color: t.blue, fontFamily: "var(--font-ui)", display: "block", marginTop: "4px" }} placeholder="relationship type" />
+                <div style={{ display: "flex", alignItems: "baseline", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
+                  <span onClick={() => onSelectEntity(otherId)} style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", cursor: "pointer", fontWeight: 500 }}>↔ {other?.name}</span>
+                  <EditableText value={rel.type} onChange={v => dispatch({ type: "UPDATE_RELATIONSHIP", id: rel.id, data: { type: v } })}
+                    style={{ fontSize: "11px", color: t.blue, fontFamily: "var(--font-ui)" }} placeholder="relationship type" />
+                </div>
                 <EditableText value={rel.dynamic} onChange={v => dispatch({ type: "UPDATE_RELATIONSHIP", id: rel.id, data: { dynamic: v } })}
                   style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", display: "block", marginTop: "2px" }} isWork placeholder="dynamic" />
                 <div style={{ marginTop: "6px" }}><TensionSlider value={rel.tension} onChange={v => dispatch({ type: "UPDATE_RELATIONSHIP", id: rel.id, data: { tension: v } })} /></div>
@@ -1368,6 +1613,7 @@ const VIEWS = [
   { id: "arc", label: "Arc Timeline", icon: "▸" },
   { id: "layers", label: "Layer Map", icon: "≡" },
   { id: "coherence", label: "Coherence", icon: "◈" },
+  { id: "compendium", label: "Compendium", icon: "📖" },
 ];
 
 export default function Storywright() {
@@ -1379,7 +1625,7 @@ export default function Storywright() {
   const [selectedPrinciple, setSelectedPrinciple] = useState(null);
   const [showMeta, setShowMeta] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(true);
   const [apiKey, setApiKey] = useState(() => {
     try {
       return localStorage.getItem("STORYWRIGHT_API_KEY") || "";
@@ -1471,11 +1717,21 @@ export default function Storywright() {
         width: "100%", height: "100vh", display: "flex", flexDirection: "column",
         background: theme.bgCanvas, color: theme.textUiStrong, fontFamily: "var(--font-ui)", overflow: "hidden",
         transition: "background 0.3s, color 0.3s",
+        minWidth: "1200px",
+        margin: 0,
+        padding: 0,
+        border: "none",
+        outline: "none",
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
       }}>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
         {/* HEADER — permanent element: opaque, 1px border, no shadow */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 20px", borderBottom: `1px solid ${theme.borderBezel}`, background: theme.bgPane, flexShrink: 0, transition: "background 0.3s, border-color 0.3s" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 20px", borderBottom: `1px solid ${theme.borderBezel}`, background: theme.bgPane, flexShrink: 0, transition: "background 0.3s, border-color 0.3s", position: "sticky", top: 0, zIndex: 100 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "-0.2px", color: theme.textUiStrong }}>Storywright</span>
             <div style={{ display: "flex", gap: "2px", background: theme.bgCanvas, borderRadius: "5px", padding: "2px", border: `1px solid ${theme.borderBezel}` }}>
@@ -1562,14 +1818,23 @@ export default function Storywright() {
         )}
 
         {/* MAIN CONTENT */}
-        <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-          <div style={{ flex: 1, overflow: "hidden" }}>
+        <div style={{ 
+          display: "flex", 
+          flex: 1, 
+          overflow: "hidden", 
+          paddingLeft: "clamp(40px, 10vw, 200px)",
+          paddingRight: "0",
+          minWidth: "1200px",
+          boxSizing: "border-box"
+        }}>
+          <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
             {surface === "conversation" && <ConversationPane state={state} dispatch={dispatch} messages={messages} setMessages={setMessages} apiKey={apiKey} />}
             {surface === "workbench" && view === "constellation" && <ConstellationView state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} selectedPrinciple={selectedPrinciple} onSelectPrinciple={handleSelectPrinciple} />}
             {surface === "workbench" && view === "tension" && <TensionWeb state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} />}
             {surface === "workbench" && view === "arc" && <ArcTimeline state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} dispatch={dispatch} />}
             {surface === "workbench" && view === "layers" && <LayerMap state={state} onSelectEntity={handleSelectEntity} onSelectPrinciple={handleSelectPrinciple} dispatch={dispatch} />}
             {surface === "workbench" && view === "coherence" && <CoherenceView state={state} />}
+            {surface === "workbench" && view === "compendium" && <CompendiumView state={state} dispatch={dispatch} onSelectEntity={handleSelectEntity} />}
           </div>
 
           {/* INSPECTOR — permanent element: opaque, 1px border */}
@@ -1590,6 +1855,7 @@ export default function Storywright() {
           padding: "4px 20px", borderTop: `1px solid ${theme.borderBezel}`, background: theme.bgPane,
           fontSize: "10px", color: theme.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 500, flexShrink: 0,
           transition: "background 0.3s, border-color 0.3s",
+          position: "sticky", bottom: 0, zIndex: 100,
         }}>
           <div style={{ display: "flex", gap: "16px" }}>
             <span><span style={{ color: theme.yellow }}>●</span> {state.principles.length}p</span>
