@@ -78,6 +78,35 @@ const useT = () => useContext(ThemeCtx);
 const PORT_COLOR_K = { universal: "yellow", structural: "blue", cultural: "red", linguistic: "red" };
 const TYPE_ICON = { character: "◉", faction: "⬡", location: "◇", instrument: "⬢" };
 
+/** Wrap at word boundaries; hyphenated compounds break at hyphen (no mid-word splits). */
+const wrapText = (str, maxChars) => {
+  if (!str) return [""];
+  if (str.length <= maxChars) return [str];
+  const tokens = [];
+  for (const w of str.split(/\s+/)) {
+    if (w.length <= maxChars) {
+      tokens.push(w);
+    } else if (w.includes("-")) {
+      w.split("-").forEach(p => p && tokens.push(p));
+    } else {
+      for (let i = 0; i < w.length; i += maxChars) tokens.push(w.slice(i, i + maxChars));
+    }
+  }
+  const lines = [];
+  let line = "";
+  for (const t of tokens) {
+    const toAdd = line ? " " + t : t;
+    if (line.length + toAdd.length <= maxChars) {
+      line += toAdd;
+    } else {
+      if (line) lines.push(line.trimEnd());
+      line = t;
+    }
+  }
+  if (line) lines.push(line.trimEnd());
+  return lines.length ? lines : [str];
+};
+
 // ─── DATA REDUCER ────────────────────────────────────────────────────────────
 
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -147,12 +176,50 @@ function undoReducer(state, action) {
   return { past: [...state.past.slice(-50), state.present], present: newPresent, future: [] };
 }
 
-// ─── EMPTY & SEED STATE ─────────────────────────────────────────────────────
+// ─── EMPTY STATE & ONTOLOGY CONFIG ───────────────────────────────────────────
 
 const EMPTY = {
   meta: { title: "", subtitle: "", coreStatement: "", narrativeArgument: "" },
   principles: [], entities: [], relationships: [], acts: [], expressions: [],
 };
+
+const DEFAULT_ONTOLOGY_PATH = "/data/ontologies/morrow-doctrine.json";
+
+/** Parse and validate JSON into ontology state. */
+function parseAndValidateOntology(data, opts = {}) {
+  if (!data || typeof data !== "object") {
+    return { state: null, warnings: [], errors: ["Input must be a JSON object."] };
+  }
+
+  if (Array.isArray(data.principles) && Array.isArray(data.entities)) {
+    return { state: data, warnings: [], errors: [] };
+  }
+
+  const isStoryBible = [
+    "meta_thesis", "metaThesis",
+    "thematic_engine", "thematicEngine",
+    "protagonist_architecture", "protagonistArchitecture",
+    "character_definitions", "characterDefinitions",
+  ].some(k => data[k] != null);
+
+  if (!isStoryBible) {
+    return {
+      state: null,
+      warnings: [],
+      errors: ["Unsupported JSON format. Expected Story Bible or Storywright ontology."],
+    };
+  }
+
+  const normalized = normalizeStoryBible(data);
+  const converted = convertStoryBibleToOntology(normalized.storyBible, opts);
+  return {
+    state: converted.state,
+    warnings: [...normalized.warnings, ...converted.warnings],
+    errors: [...normalized.errors, ...converted.errors],
+  };
+}
+
+// ─── LEGACY SEED (fallback when default ontology unavailable) ─────────────────
 
 const SEED = {
   meta: {
@@ -243,305 +310,520 @@ const SEED = {
 
 // ─── STORY BIBLE CONVERTER ───────────────────────────────────────────────────
 
-function convertStoryBibleToOntology(storyBible) {
-  const uid = () => Math.random().toString(36).slice(2, 8);
-  
-  // Extract meta
+function normalizeStoryBible(raw) {
+  const warnings = [];
+  const errors = [];
+  const getKey = (obj, ...keys) => keys.reduce((v, k) => (v ?? obj?.[k]), undefined);
+
+  const storyBible = {
+    meta: raw?.meta || {},
+    meta_thesis: getKey(raw, "meta_thesis", "metaThesis") || {},
+    thematic_engine: getKey(raw, "thematic_engine", "thematicEngine") || {},
+    protagonist_architecture: getKey(raw, "protagonist_architecture", "protagonistArchitecture") || {},
+    character_definitions: getKey(raw, "character_definitions", "characterDefinitions") || {},
+    faction_definitions: getKey(raw, "faction_definitions", "factionDefinitions") || {},
+    narrative_structure: getKey(raw, "narrative_structure", "narrativeStructure") || {},
+    world_building: getKey(raw, "world_building", "worldBuilding") || {},
+    tone_and_aesthetic: getKey(raw, "tone_and_aesthetic", "toneAndAesthetic") || {},
+    relationship_matrix: getKey(raw, "relationship_matrix", "relationshipMatrix") || {},
+    jungian_shadow_architecture: getKey(raw, "jungian_shadow_architecture", "jungianShadowArchitecture") || {},
+    protagonist_expression_guide: getKey(raw, "protagonist_expression_guide", "protagonistExpressionGuide") || {},
+    set_piece_architecture: getKey(raw, "set_piece_architecture", "setPieceArchitecture") || {},
+    appendices: raw?.appendices || {},
+  };
+
+  const coreRequired = [
+    "meta_thesis",
+    "thematic_engine",
+    "protagonist_architecture",
+    "character_definitions",
+    "narrative_structure",
+    "relationship_matrix",
+  ];
+  coreRequired.forEach(section => {
+    if (!storyBible[section] || Object.keys(storyBible[section]).length === 0) {
+      errors.push(`Missing required Story Bible section: ${section}.`);
+    }
+  });
+
+  ["meta", "world_building", "tone_and_aesthetic", "appendices"].forEach(section => {
+    if (!storyBible[section] || Object.keys(storyBible[section]).length === 0) {
+      warnings.push(`Missing recommended section for robust import: ${section}.`);
+    }
+  });
+
+  if (!storyBible.faction_definitions || Object.keys(storyBible.faction_definitions).length === 0) {
+    warnings.push("Missing faction_definitions: importing without faction entities.");
+  }
+
+  const primaryThemes = getKey(storyBible.thematic_engine, "primary_themes", "primaryThemes");
+  if (!Array.isArray(primaryThemes) || primaryThemes.length === 0) {
+    errors.push("thematic_engine.primary_themes must be a non-empty array.");
+  }
+
+  const coreCast = getKey(storyBible.character_definitions, "core_cast", "coreCast");
+  if (!Array.isArray(coreCast) || coreCast.length === 0) {
+    errors.push("character_definitions.core_cast must be a non-empty array.");
+  }
+
+  const acts = getKey(storyBible.narrative_structure, "acts", "acts");
+  if (!Array.isArray(acts) || acts.length === 0) {
+    errors.push("narrative_structure.acts must be a non-empty array.");
+  }
+
+  const relationships = getKey(storyBible.relationship_matrix, "relationships", "relationships");
+  if (!Array.isArray(relationships) || relationships.length === 0) {
+    warnings.push("relationship_matrix.relationships is empty; relationship graph will be sparse.");
+  }
+
+  return { storyBible, warnings, errors };
+}
+
+function convertStoryBibleToOntology(storyBible, opts = {}) {
+  const { curated = false } = opts;
+  const warnings = [];
+  const errors = [];
+  const getKey = (obj, ...keys) => keys.reduce((v, k) => (v ?? obj?.[k]), undefined);
+  const toArray = (v) => (Array.isArray(v) ? v : (v == null ? [] : [v]));
+  const normalizeName = (value) => String(value || "").trim().toLowerCase();
+  const actFromValue = (value) => {
+    const n = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+  };
+  const textHead = (text) => {
+    const s = String(text || "").trim();
+    if (!s) return "";
+    const m = s.match(/(.+?)(?:—|–|:)/);
+    return (m ? m[1] : s).trim();
+  };
+  const splitStateMovement = (text) => {
+    const s = String(text || "").trim();
+    if (!s) return { state: "", movement: "" };
+    const dashSplit = s.split(/\s*[—–:]\s*/);
+    if (dashSplit.length >= 2) {
+      return { state: dashSplit[0].trim(), movement: dashSplit.slice(1).join(" — ").trim() };
+    }
+    const sentenceSplit = s.match(/^([^.!?]+[.!?])\s*(.*)$/);
+    if (sentenceSplit) {
+      return { state: sentenceSplit[1].trim().replace(/[.!?]$/, ""), movement: sentenceSplit[2].trim() };
+    }
+    return { state: s, movement: "" };
+  };
+
+  const metaThesis = storyBible.meta_thesis || {};
+  const thematicEngine = storyBible.thematic_engine || {};
+  const protArch = storyBible.protagonist_architecture || {};
+  const charDefs = storyBible.character_definitions || {};
+  const factionDefs = storyBible.faction_definitions || {};
+  const narrStruct = storyBible.narrative_structure || {};
+  const worldBuilding = storyBible.world_building || {};
+
   const meta = {
     title: storyBible.meta?.title || "",
     subtitle: storyBible.meta?.subtitle || "",
-    coreStatement: storyBible.meta_thesis?.core_statement || "",
-    narrativeArgument: storyBible.meta_thesis?.narrative_argument || "",
+    coreStatement: getKey(metaThesis, "core_statement", "coreStatement") || "",
+    narrativeArgument: getKey(metaThesis, "narrative_argument", "narrativeArgument") || "",
   };
 
-  // Convert primary themes to principles
-  const principles = (storyBible.thematic_engine?.primary_themes || []).map((theme, idx) => ({
+  const primaryThemes = getKey(thematicEngine, "primary_themes", "primaryThemes") || [];
+  const principles = primaryThemes.map((theme, idx) => ({
     id: `p${idx + 1}`,
-    name: theme.theme,
-    definition: theme.definition,
-    portability: "universal",
-    redundancy: 1, // Default, can be calculated later
+    name: getKey(theme, "theme", "name") || `Principle ${idx + 1}`,
+    definition: getKey(theme, "definition", "statement") || "",
+    portability: getKey(theme, "portability", "scope") || "universal",
+    redundancy: Number(getKey(theme, "redundancy")) || 1,
   }));
+  if (principles.length === 0) {
+    errors.push("No principles could be extracted from thematic_engine.primary_themes.");
+  }
 
-  // Create principle name to ID mapping
-  const principleMap = {};
-  principles.forEach(p => { principleMap[p.name] = p.id; });
+  const principleNameToId = new Map();
+  principles.forEach(p => principleNameToId.set(normalizeName(p.name), p.id));
 
-  // Convert characters
-  const characterEntities = (storyBible.character_definitions?.core_cast || []).map((char, idx) => {
-    const entityId = `e${idx + 1}`;
-    // Map principles by name - check function_in_narrative, psychology, and relationship_to_protagonist
-    const servesPrinciples = [];
-    const checkText = [
-      char.function_in_narrative || "",
-      char.psychology || "",
-      char.relationship_to_protagonist || char.relationship_to_morrow || "",
-    ].join(" ").toLowerCase();
-    
-    principles.forEach(p => {
-      const themeName = p.name.toLowerCase();
-      // Check if theme name appears in any of the character's text fields
-      if (checkText.includes(themeName)) {
-        if (!servesPrinciples.includes(p.id)) servesPrinciples.push(p.id);
+  const resolvePrincipleIds = (rawRefs) => {
+    const refs = toArray(rawRefs).map(v => String(v || "").trim()).filter(Boolean);
+    return refs
+      .map(ref => {
+        if (principles.some(p => p.id === ref)) return ref;
+        return principleNameToId.get(normalizeName(ref)) || null;
+      })
+      .filter(Boolean);
+  };
+
+  const actsFromStruct = Array.isArray(getKey(narrStruct, "acts", "acts")) ? getKey(narrStruct, "acts", "acts") : [];
+  const acts = actsFromStruct.map((act, idx) => ({
+    number: actFromValue(getKey(act, "act_number", "actNumber", "number")) ?? (idx + 1),
+    title: getKey(act, "title", "name") || "",
+    episodes: getKey(act, "episodes", "episode_range", "episodeRange") || "",
+    tone: getKey(act, "tone") || "",
+    question: getKey(act, "central_question", "centralQuestion", "question") || "",
+  }));
+  const orderedActNumbers = acts.map(a => a.number).sort((a, b) => a - b);
+  const positionalAct = (index, total) => {
+    if (orderedActNumbers.length === 0) return index + 1;
+    if (orderedActNumbers.length === 1) return orderedActNumbers[0];
+    const ratio = total > 1 ? (index / (total - 1)) : 0.5;
+    const slot = Math.round(ratio * (orderedActNumbers.length - 1));
+    return orderedActNumbers[Math.min(orderedActNumbers.length - 1, Math.max(0, slot))];
+  };
+
+  const parseArcFromItems = (items) => {
+    const entries = toArray(items);
+    if (entries.length === 0) return [];
+    return entries.map((item, idx) => {
+      const total = entries.length;
+      if (item && typeof item === "object") {
+        const explicitAct = actFromValue(getKey(item, "act", "act_number", "actNumber", "number"));
+        const movement = getKey(item, "movement", "title", "key_dynamic", "keyDynamic") || "";
+        const rawState = getKey(item, "state", "scene", "description", "event", "text") || "";
+        const split = splitStateMovement(rawState);
+        return {
+          act: explicitAct ?? positionalAct(idx, total),
+          state: split.state || textHead(rawState),
+          movement: String(movement || split.movement || ""),
+        };
       }
-    });
-    
-    // Extract arc from protagonist_architecture or character arc
-    const arc = [];
-    const isProtagonist = storyBible.protagonist_architecture && 
-      (char.name === storyBible.protagonist_architecture.name || 
-       char.name.toLowerCase().includes(storyBible.protagonist_architecture.name?.toLowerCase() || ""));
-    
-    if (isProtagonist && storyBible.protagonist_architecture.arc_logic) {
-      // Protagonist arc from arc_logic - extract state and movement
-      const arcLogic = storyBible.protagonist_architecture.arc_logic;
-      const parseArcState = (text) => {
-        if (!text) return { state: "", movement: "" };
-        const parts = text.split("—").map(s => s.trim());
-        return { state: parts[0] || "", movement: parts[1] || "" };
-      };
-      if (arcLogic.act_one) {
-        const parsed = parseArcState(arcLogic.act_one);
-        arc.push({ act: 1, state: parsed.state, movement: parsed.movement });
-      }
-      if (arcLogic.act_two) {
-        const parsed = parseArcState(arcLogic.act_two);
-        arc.push({ act: 2, state: parsed.state, movement: parsed.movement });
-      }
-      if (arcLogic.act_three) {
-        const parsed = parseArcState(arcLogic.act_three);
-        arc.push({ act: 3, state: parsed.state, movement: parsed.movement });
-      }
-      if (arcLogic.act_four) {
-        const parsed = parseArcState(arcLogic.act_four);
-        arc.push({ act: 4, state: parsed.state, movement: parsed.movement });
-      }
-      if (arcLogic.act_five) {
-        const parsed = parseArcState(arcLogic.act_five);
-        arc.push({ act: 5, state: parsed.state, movement: parsed.movement });
-      }
-    } else if (char.key_scenes && char.key_scenes.length > 0) {
-      // Extract arc from key_scenes by matching to acts
-      const acts = storyBible.narrative_structure?.acts || [];
-      acts.forEach(act => {
-        const matchingScenes = char.key_scenes.filter(scene => {
-          const sceneLower = scene.toLowerCase();
-          const episodeRange = act.episodes || "";
-          const episodeStart = episodeRange.split("-")[0]?.trim() || episodeRange.split("–")[0]?.trim() || "";
-          return sceneLower.includes(`act ${act.act_number}`) || 
-                 sceneLower.includes(`act ${act.act_number === 1 ? "one" : act.act_number === 2 ? "two" : act.act_number === 3 ? "three" : act.act_number === 4 ? "four" : "five"}`) ||
-                 (episodeStart && sceneLower.includes(`episode ${episodeStart}`)) ||
-                 (act.act_number === 1 && (sceneLower.includes("first") || sceneLower.includes("opening"))) ||
-                 (act.act_number === 5 && (sceneLower.includes("final") || sceneLower.includes("trial") || sceneLower.includes("execution")));
-        });
-        if (matchingScenes.length > 0) {
-          // Extract state from scene description
-          const sceneText = matchingScenes[0];
-          const stateMatch = sceneText.match(/(.+?)(?:—|–|:)/);
-          const state = stateMatch ? stateMatch[1].trim() : sceneText.substring(0, 50);
-          arc.push({ act: act.act_number, state, movement: "" });
+      const split = splitStateMovement(String(item || ""));
+      return { act: positionalAct(idx, total), state: split.state, movement: split.movement };
+    }).filter(a => a.state);
+  };
+  const normalizeArcForTimeline = (arcItems) => {
+    const out = [];
+    const byAct = new Map();
+    arcItems
+      .filter(a => Number.isFinite(a?.act))
+      .sort((a, b) => a.act - b.act)
+      .forEach(item => {
+        const existing = byAct.get(item.act);
+        if (!existing) {
+          const clean = { act: item.act, state: String(item.state || "").trim(), movement: String(item.movement || "").trim() };
+          byAct.set(item.act, clean);
+          out.push(clean);
+          return;
+        }
+        const additions = [item.state, item.movement].map(v => String(v || "").trim()).filter(Boolean);
+        if (additions.length > 0) {
+          existing.movement = [existing.movement, ...additions].filter(Boolean).join(" · ");
         }
       });
-    } else if (char.arc) {
-      // Extract arc from character arc description text
-      const arcText = char.arc.toLowerCase();
-      if (arcText.includes("act 1") || arcText.includes("act one") || arcText.includes("first")) arc.push({ act: 1, state: "", movement: "" });
-      if (arcText.includes("act 2") || arcText.includes("act two") || arcText.includes("second")) arc.push({ act: 2, state: "", movement: "" });
-      if (arcText.includes("act 3") || arcText.includes("act three") || arcText.includes("third")) arc.push({ act: 3, state: "", movement: "" });
-      if (arcText.includes("act 4") || arcText.includes("act four") || arcText.includes("fourth")) arc.push({ act: 4, state: "", movement: "" });
-      if (arcText.includes("act 5") || arcText.includes("act five") || arcText.includes("fifth") || arcText.includes("trial")) arc.push({ act: 5, state: "", movement: "" });
+    return out;
+  };
+
+  const parseProtagonistArc = () => {
+    const directArc = getKey(protArch, "arc", "arc_path", "arcPath");
+    if (Array.isArray(directArc) && directArc.length > 0) return parseArcFromItems(directArc);
+
+    const arcLogic = getKey(protArch, "arc_logic", "arcLogic");
+    if (arcLogic && typeof arcLogic === "object") {
+      const keys = [
+        ["act_one", "actOne", 1],
+        ["act_two", "actTwo", 2],
+        ["act_three", "actThree", 3],
+        ["act_four", "actFour", 4],
+        ["act_five", "actFive", 5],
+      ];
+      const out = [];
+      keys.forEach(([snake, camel, act]) => {
+        const text = getKey(arcLogic, snake, camel);
+        if (!text) return;
+        const split = splitStateMovement(text);
+        out.push({ act, state: split.state || textHead(text), movement: split.movement || "" });
+      });
+      if (out.length > 0) return out;
     }
 
-    // Extract shadow architecture if protagonist
+    const sevenMovements = getKey(protArch, "arc_seven_movements", "arcSevenMovements", "arc_movements", "arcMovements");
+    if (Array.isArray(sevenMovements) && sevenMovements.length > 0) return parseArcFromItems(sevenMovements);
+    return [];
+  };
+
+  const protagonistName = getKey(protArch, "name", "protagonist_name", "protagonistName") || "";
+  const coreCast = getKey(charDefs, "core_cast", "coreCast") || [];
+  const castHasProtagonist = coreCast.some(c => normalizeName(getKey(c, "name")) === normalizeName(protagonistName));
+  const castWithProtagonist = (!castHasProtagonist && protagonistName)
+    ? [{
+        name: protagonistName,
+        function_in_narrative: "Protagonist",
+        role: getKey(protArch, "archetype", "title") || "Protagonist",
+        psychology: getKey(getKey(protArch, "psychology"), "core_trait", "coreTrait") || "",
+        serves_principles: getKey(protArch, "serves_principles", "servesPrinciples", "themes", "principles") || [],
+      }, ...coreCast]
+    : coreCast;
+  const shadowArch = storyBible.jungian_shadow_architecture || {};
+
+  const characterEntities = castWithProtagonist.map((char, idx) => {
+    const entityId = `e${idx + 1}`;
+    const name = String(getKey(char, "name") || `Character ${idx + 1}`);
+    const isProtagonist = protagonistName && normalizeName(name) === normalizeName(protagonistName);
+
+    const rawArc = isProtagonist
+      ? parseProtagonistArc()
+      : (Array.isArray(char.arc) ? parseArcFromItems(char.arc) : parseArcFromItems(getKey(char, "key_scenes", "keyScenes")));
+    const arc = normalizeArcForTimeline(rawArc);
+
     let shadow = null;
-    
-    if (storyBible.jungian_shadow_architecture && isProtagonist) {
-      shadow = {};
-      (storyBible.jungian_shadow_architecture.shadow_contents || []).forEach(shadowItem => {
-        // Map shadow quality to principle by finding principle mentioned in trigger or projection
-        let triggerPrincipleId = null;
-        const triggerText = (shadowItem.primary_trigger_character || shadowItem.projection_pattern || "").toLowerCase();
-        principles.forEach(p => {
-          if (triggerText.includes(p.name.toLowerCase())) {
-            triggerPrincipleId = p.id;
-          }
-        });
-        // If no match found, try to match by theme keywords
-        if (!triggerPrincipleId) {
-          const qualityText = shadowItem.disowned_quality?.toLowerCase() || "";
-          principles.forEach(p => {
-            const defLower = p.definition.toLowerCase();
-            if (qualityText.includes("dependency") && defLower.includes("license")) triggerPrincipleId = p.id;
-            else if (qualityText.includes("ordinary") && defLower.includes("portrait")) triggerPrincipleId = p.id;
-            else if (qualityText.includes("approval") && defLower.includes("mirror")) triggerPrincipleId = p.id;
-            else if (qualityText.includes("cruelty") && defLower.includes("mirror")) triggerPrincipleId = p.id;
-          });
-        }
-        if (triggerPrincipleId) {
-          shadow[shadowItem.disowned_quality.toLowerCase().replace(/\s+/g, "")] = triggerPrincipleId;
-        }
+    if (isProtagonist) {
+      const contents = toArray(getKey(shadowArch, "shadow_contents", "shadowContents"));
+      const mapped = {};
+      contents.forEach(item => {
+        const quality = normalizeName(getKey(item, "disowned_quality", "disownedQuality"));
+        const principleRef = getKey(item, "principle", "principle_id", "principleId", "theme", "theme_id", "themeId");
+        const resolved = resolvePrincipleIds(principleRef);
+        if (quality && resolved[0]) mapped[quality.replace(/\s+/g, "")] = resolved[0];
       });
-      if (Object.keys(shadow).length === 0) shadow = null;
+      if (Object.keys(mapped).length > 0) shadow = mapped;
     }
 
     return {
       id: entityId,
-      name: char.name,
+      name,
       type: "character",
-      layer: "institutional",
-      role: char.function_in_narrative || char.role || "",
-      psychology: char.psychology || "",
-      servesPrinciples,
+      layer: getKey(char, "layer") || "institutional",
+      role: getKey(char, "function_in_narrative", "functionInNarrative", "role") || "",
+      psychology: getKey(char, "psychology", "character") || "",
+      servesPrinciples: resolvePrincipleIds(getKey(char, "serves_principles", "servesPrinciples", "themes", "principles")),
       arc,
       shadow,
     };
   });
 
-  // Convert factions
-  const factionEntities = (storyBible.faction_definitions?.factions || []).map((faction, idx) => {
-    const entityId = `e${characterEntities.length + idx + 1}`;
-    const servesPrinciples = [];
-    if (faction.structural_role) {
-      principles.forEach(p => {
-        if (faction.structural_role.toLowerCase().includes(p.name.toLowerCase()) ||
-            faction.character?.toLowerCase().includes(p.name.toLowerCase())) {
-          if (!servesPrinciples.includes(p.id)) servesPrinciples.push(p.id);
-        }
-      });
+  const allFactions = getKey(factionDefs, "factions", "items") || [];
+  let factionsToConvert = allFactions;
+  if (curated) {
+    const marked = allFactions.filter(f =>
+      getKey(f, "central", "is_central", "isCentral") === true ||
+      String(getKey(f, "narrative_priority", "narrativePriority") || "").toLowerCase() === "high"
+    );
+    if (marked.length > 0) factionsToConvert = marked;
+    else {
+      factionsToConvert = allFactions.slice(0, Math.min(4, allFactions.length));
     }
-    return {
-      id: entityId,
-      name: faction.name,
-      type: "faction",
-      layer: "institutional",
-      role: faction.structural_role || faction.archetype || "",
-      psychology: faction.character || "",
-      servesPrinciples,
-      arc: [],
-      shadow: null,
-    };
-  });
+  }
 
-  // Convert locations
+  const factionEntities = factionsToConvert.map((faction, idx) => ({
+    id: `e${characterEntities.length + idx + 1}`,
+    name: String(getKey(faction, "name") || `Faction ${idx + 1}`),
+    type: "faction",
+    layer: getKey(faction, "layer") || "institutional",
+    role: getKey(faction, "structural_role", "structuralRole", "archetype", "role") || "",
+    psychology: getKey(faction, "character", "psychology") || "",
+    servesPrinciples: resolvePrincipleIds(getKey(faction, "serves_principles", "servesPrinciples", "themes", "principles")),
+    arc: normalizeArcForTimeline(Array.isArray(faction.arc)
+      ? parseArcFromItems(faction.arc)
+      : (parseArcFromItems(getKey(faction, "key_scenes", "keyScenes")).length > 0
+        ? parseArcFromItems(getKey(faction, "key_scenes", "keyScenes"))
+        : parseArcFromItems(getKey(faction, "trajectory")))),
+    shadow: null,
+  }));
+
+  const humanizeKey = (key) => key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
   const locationEntities = [];
-  if (storyBible.world_building?.geography) {
-    Object.entries(storyBible.world_building.geography).forEach(([key, location], idx) => {
-      const entityId = `e${characterEntities.length + factionEntities.length + idx + 1}`;
-      const locationName = typeof location === "string" ? location.split("—")[0]?.trim() || key : key;
+  if (!curated) {
+    const geography = getKey(worldBuilding, "geography") || {};
+    Object.entries(geography).forEach(([key, location], idx) => {
+      const loc = (location && typeof location === "object") ? location : {};
+      const name = getKey(loc, "name") || humanizeKey(key);
       locationEntities.push({
-        id: entityId,
-        name: locationName,
+        id: `e${characterEntities.length + factionEntities.length + idx + 1}`,
+        name,
         type: "location",
-        layer: "institutional",
-        role: typeof location === "string" ? location : "",
-        psychology: "",
-        servesPrinciples: [],
-        arc: [],
+        layer: getKey(loc, "layer") || "institutional",
+        role: getKey(loc, "narrative_function", "narrativeFunction", "role") || (typeof location === "string" ? location : ""),
+        psychology: getKey(loc, "description") || "",
+        servesPrinciples: resolvePrincipleIds(getKey(loc, "serves_principles", "servesPrinciples", "themes", "principles")),
+        arc: parseArcFromItems(getKey(loc, "arc", "key_scenes", "keyScenes")),
         shadow: null,
       });
     });
   }
 
-  // Convert instruments
   const instrumentEntities = [];
-  if (storyBible.world_building?.key_instruments) {
-    Object.entries(storyBible.world_building.key_instruments).forEach(([key, instrument], idx) => {
-      const entityId = `e${characterEntities.length + factionEntities.length + locationEntities.length + idx + 1}`;
+  if (!curated) {
+    const keyInstruments = getKey(worldBuilding, "key_instruments", "keyInstruments") || {};
+    Object.entries(keyInstruments).forEach(([key, instrument], idx) => {
+      const inst = (instrument && typeof instrument === "object") ? instrument : {};
       instrumentEntities.push({
-        id: entityId,
-        name: instrument.name || key,
+        id: `e${characterEntities.length + factionEntities.length + locationEntities.length + idx + 1}`,
+        name: getKey(inst, "name") || key.replace(/_/g, " "),
         type: "instrument",
-        layer: "institutional",
-        role: instrument.narrative_function || instrument.critical_function || "",
-        psychology: instrument.description || "",
-        servesPrinciples: [],
-        arc: [],
+        layer: getKey(inst, "layer") || "institutional",
+        role: getKey(inst, "narrative_function", "narrativeFunction", "critical_function", "criticalFunction") || "",
+        psychology: getKey(inst, "description") || "",
+        servesPrinciples: resolvePrincipleIds(getKey(inst, "serves_principles", "servesPrinciples", "themes", "principles")),
+        arc: parseArcFromItems(getKey(inst, "arc", "key_scenes", "keyScenes")),
         shadow: null,
       });
     });
   }
 
   const entities = [...characterEntities, ...factionEntities, ...locationEntities, ...instrumentEntities];
-  const entityMap = {};
-  entities.forEach(e => { entityMap[e.name] = e.id; });
-
-  // Convert relationships
-  const relationships = (storyBible.relationship_matrix?.relationships || []).map((rel, idx) => {
-    // Handle "Morrow ↔ Caine" or "Morrow — Caine" format
-    const pairMatch = rel.pair.match(/(.+?)\s*[↔—]\s*(.+)/);
-    if (!pairMatch) return null;
-    let sourceName = pairMatch[1].trim();
-    let targetName = pairMatch[2].trim();
-    
-    // Handle protagonist name variations (e.g., "Morrow" vs "Cassian Morrow")
-    const protagonistName = storyBible.protagonist_architecture?.name || "";
-    if (sourceName === "Morrow" && protagonistName) sourceName = protagonistName;
-    if (targetName === "Morrow" && protagonistName) targetName = protagonistName;
-    
-    // Try exact match first, then partial match
-    let sourceId = entityMap[sourceName];
-    let targetId = entityMap[targetName];
-    
-    if (!sourceId) {
-      // Try partial match
-      const sourceMatch = Object.keys(entityMap).find(name => 
-        name.toLowerCase().includes(sourceName.toLowerCase()) || 
-        sourceName.toLowerCase().includes(name.toLowerCase())
-      );
-      if (sourceMatch) sourceId = entityMap[sourceMatch];
+  const entityIdByName = new Map();
+  entities.forEach(entity => {
+    entityIdByName.set(normalizeName(entity.name), entity.id);
+    toArray(getKey(entity, "aliases")).forEach(alias => {
+      const n = normalizeName(alias);
+      if (n) entityIdByName.set(n, entity.id);
+    });
+  });
+  // Deterministic alias mapping for relationship matrix short names:
+  // map unique first/last tokens (e.g. "Caine" -> "Idris Caine").
+  const tokenCandidates = new Map();
+  entities.forEach(entity => {
+    const parts = String(entity.name || "").trim().split(/\s+/).filter(Boolean);
+    if (parts.length < 2) return;
+    const tokenSet = new Set();
+    tokenSet.add(normalizeName(parts[0]));
+    tokenSet.add(normalizeName(parts[parts.length - 1]));
+    parts.forEach(part => {
+      part.split("-").forEach(seg => tokenSet.add(normalizeName(seg)));
+    });
+    [...tokenSet].forEach(token => {
+      if (!token) return;
+      const list = tokenCandidates.get(token) || [];
+      list.push(entity.id);
+      tokenCandidates.set(token, list);
+    });
+  });
+  tokenCandidates.forEach((ids, token) => {
+    const unique = [...new Set(ids)];
+    if (unique.length === 1) entityIdByName.set(token, unique[0]);
+  });
+  if (protagonistName) {
+    const protagonistId = entities.find(e => normalizeName(e.name) === normalizeName(protagonistName))?.id;
+    if (protagonistId) {
+      entityIdByName.set("morrow", protagonistId);
+      const lastName = protagonistName.split(/\s+/).slice(-1)[0];
+      if (lastName) entityIdByName.set(normalizeName(lastName), protagonistId);
     }
-    
-    if (!targetId) {
-      const targetMatch = Object.keys(entityMap).find(name => 
-        name.toLowerCase().includes(targetName.toLowerCase()) || 
-        targetName.toLowerCase().includes(name.toLowerCase())
-      );
-      if (targetMatch) targetId = entityMap[targetMatch];
-    }
-    
-    if (!sourceId || !targetId) return null;
-    
-    // Infer tension from trajectory keywords
-    let tension = 0.5;
-    const trajectory = (rel.trajectory || "").toLowerCase();
-    const dynamic = (rel.dynamic || "").toLowerCase();
-    if (trajectory.includes("opposition") || trajectory.includes("conflict") || trajectory.includes("rivalry") || dynamic.includes("rivalry")) tension = 0.8;
-    else if (trajectory.includes("friendship") || trajectory.includes("bond") || trajectory.includes("respect") || dynamic.includes("friendship")) tension = 0.4;
-    else if (trajectory.includes("departure") || trajectory.includes("grief") || trajectory.includes("devastation") || dynamic.includes("intimate")) tension = 0.9;
-    else if (trajectory.includes("testimony") || trajectory.includes("conviction")) tension = 0.7;
-    
-    return {
-      id: `r${idx + 1}`,
-      source: sourceId,
-      target: targetId,
-      type: rel.type || "",
-      dynamic: rel.dynamic || "",
-      tension,
-      trajectory: rel.trajectory || "",
-    };
-  }).filter(Boolean);
+  }
 
-  // Convert acts
-  const acts = (storyBible.narrative_structure?.acts || []).map(act => ({
-    number: act.act_number,
-    title: act.title || "",
-    episodes: act.episodes || "",
-    tone: act.tone || "",
-    question: act.central_question || act.morrow_state?.split(".")[0] || "",
-  }));
+  const relationships = toArray(getKey(storyBible.relationship_matrix, "relationships", "edges"))
+    .map((rel, idx) => {
+      let sourceName = getKey(rel, "source", "source_character", "sourceCharacter");
+      let targetName = getKey(rel, "target", "target_character", "targetCharacter");
+      if ((!sourceName || !targetName) && rel?.pair) {
+        const pairMatch = String(rel.pair).match(/(.+?)\s*[↔—-]\s*(.+)/);
+        if (pairMatch) {
+          sourceName = sourceName || pairMatch[1].trim();
+          targetName = targetName || pairMatch[2].trim();
+        }
+      }
+      const source = entityIdByName.get(normalizeName(sourceName));
+      const target = entityIdByName.get(normalizeName(targetName));
+      if (!source || !target) {
+        warnings.push(`Skipped relationship with unresolved entities: ${sourceName || "?"} -> ${targetName || "?"}.`);
+        return null;
+      }
+      const tensionRaw = getKey(rel, "tension");
+      const tension = Number.isFinite(Number(tensionRaw)) ? Number(tensionRaw) : 0.5;
+      return {
+        id: `r${idx + 1}`,
+        source,
+        target,
+        type: getKey(rel, "type", "relationship_type", "relationshipType") || "",
+        dynamic: getKey(rel, "dynamic", "description") || "",
+        tension,
+        trajectory: getKey(rel, "trajectory") || "",
+      };
+    })
+    .filter(Boolean);
 
-  // Extract expressions from various sections (simplified - would need more parsing)
   const expressions = [];
-  // Could extract from protagonist_expression_guide, key_scenes, etc.
-  // For now, leave empty as expressions are more complex to extract
+  const MAX_EXPRESSIONS = 120;
+  const pushExpression = (raw, defaults = {}) => {
+    if (expressions.length >= MAX_EXPRESSIONS) return;
+    const asObj = (raw && typeof raw === "object") ? raw : {};
+    const content = getKey(asObj, "content", "line", "text", "description", "phrase") || (typeof raw === "string" ? raw : "");
+    if (!String(content || "").trim()) return;
+    const act = actFromValue(getKey(asObj, "act", "act_number", "actNumber"));
+    const characterRef = getKey(asObj, "character", "speaker", "entity", "entity_name", "entityName") || defaults.characterName || protagonistName;
+    const character = entityIdByName.get(normalizeName(characterRef)) || "";
+    expressions.push({
+      id: `x${expressions.length + 1}`,
+      type: defaults.type || getKey(asObj, "type") || "dialogue",
+      content: String(content).trim(),
+      character,
+      act: act ?? defaults.act ?? null,
+      servesPrinciples: resolvePrincipleIds(getKey(asObj, "serves_principles", "servesPrinciples", "themes", "principles", "theme")),
+      servesEntity: character || "",
+      portability: getKey(asObj, "portability") || defaults.portability || "linguistic",
+      redundancy: Number(getKey(asObj, "redundancy")) || 1,
+      note: getKey(asObj, "note", "notes") || defaults.note || "",
+    });
+  };
+
+  const inferTypeFromPath = (path) => {
+    const p = path.toLowerCase();
+    if (p.includes("dialogue")) return "dialogue";
+    if (p.includes("visual")) return "visual";
+    if (p.includes("motif")) return "motif";
+    if (p.includes("physical") || p.includes("bearing") || p.includes("gesture")) return "behavior";
+    return "note";
+  };
+  const inferPortabilityFromType = (type) => {
+    if (type === "dialogue") return "linguistic";
+    if (type === "visual" || type === "behavior") return "cultural";
+    if (type === "motif" || type === "set_piece") return "structural";
+    return "linguistic";
+  };
+  const collectExpressionStrings = (value, path = "") => {
+    if (expressions.length >= MAX_EXPRESSIONS) return;
+    if (typeof value === "string") {
+      const type = inferTypeFromPath(path);
+      pushExpression(value, { type, portability: inferPortabilityFromType(type), note: path });
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, idx) => collectExpressionStrings(item, `${path}[${idx}]`));
+      return;
+    }
+    if (value && typeof value === "object") {
+      Object.entries(value).forEach(([k, v]) => collectExpressionStrings(v, path ? `${path}.${k}` : k));
+    }
+  };
+
+  const expressionGuide = storyBible.protagonist_expression_guide || {};
+  const expressionBuckets = [
+    { key: "dialogue_signatures", type: "dialogue", portability: "linguistic" },
+    { key: "dialogueSignatures", type: "dialogue", portability: "linguistic" },
+    { key: "visual_signatures", type: "visual", portability: "cultural" },
+    { key: "visualSignatures", type: "visual", portability: "cultural" },
+    { key: "visual_motifs", type: "motif", portability: "cultural" },
+    { key: "visualMotifs", type: "motif", portability: "cultural" },
+    { key: "recurring_motifs", type: "motif", portability: "structural" },
+    { key: "recurringMotifs", type: "motif", portability: "structural" },
+    { key: "physical_signatures", type: "behavior", portability: "cultural" },
+    { key: "physicalSignatures", type: "behavior", portability: "cultural" },
+  ];
+  expressionBuckets.forEach(({ key, type, portability }) => {
+    toArray(expressionGuide?.[key]).forEach(item => pushExpression(item, { type, portability }));
+  });
+  collectExpressionStrings(expressionGuide);
+
+  const setPieceArch = getKey(storyBible, "set_piece_architecture", "setPieceArchitecture");
+  toArray(getKey(setPieceArch, "set_pieces", "setPieces")).forEach(item => {
+    pushExpression(item, { type: "set_piece", portability: "structural" });
+  });
+  if (expressions.length === 0 && setPieceArch) {
+    collectExpressionStrings(setPieceArch, "set_piece_architecture");
+  }
+
+  if (principles.length === 0 || entities.length === 0) {
+    errors.push("Conversion did not produce a valid ontology (missing principles or entities).");
+    return { state: null, warnings, errors };
+  }
 
   return {
-    meta,
-    principles,
-    entities,
-    relationships,
-    acts,
-    expressions,
+    state: {
+      meta,
+      principles,
+      entities,
+      relationships,
+      acts,
+      expressions,
+    },
+    warnings,
+    errors,
   };
 }
 
@@ -1055,54 +1337,66 @@ function ConstellationView({ state, selectedEntity, onSelectEntity, selectedPrin
           </g>
         ))}
 
-        {/* PRINCIPLE NODES — constitutional core */}
+        {/* PRINCIPLE NODES — constitutional core; wrapped labels within bounds */}
         {layout.principles.map(p => {
           const active = selectedPrinciple === p.id || (selectedEntity && state.entities.find(e => e.id === selectedEntity)?.servesPrinciples.includes(p.id));
           const hovered = hoveredNode === p.id;
           const r = 18 + p.redundancy * 1.5;
+          const labelLines = wrapText(p.name, 16);
+          const lineH = 14;
+          const pillH = 16 + (labelLines.length - 1) * lineH;
+          const pillTop = p.y - r - 22 - (labelLines.length - 1) * lineH;
           return (
             <g key={p.id} onClick={() => onSelectPrinciple(selectedPrinciple === p.id ? null : p.id)}
               onMouseEnter={() => setHoveredNode(p.id)} onMouseLeave={() => setHoveredNode(null)} style={{ cursor: "pointer" }}>
               <circle cx={p.x} cy={p.y} r={r}
                 fill={active ? t.yellowTint : hovered ? t.bgHover : t.nodeFill}
                 stroke={active ? t.yellow : t.nodeStroke} strokeWidth={active ? 2 : t.nodeStrokeW} style={{ transition: "all 0.25s" }} />
-              {/* Label with background pill for legibility */}
-              <rect x={p.x - 52} y={p.y - r - 22} width="104" height="16" rx="3" fill={t.bgCanvas} fillOpacity="0.9" style={{ pointerEvents: "none" }} />
-              <text x={p.x} y={p.y - r - 10} textAnchor="middle" fill={active || hovered ? t.yellow : t.textUiStrong}
-                fontSize="11" fontFamily="var(--font-work)" fontWeight="600" style={{ transition: "fill 0.25s", pointerEvents: "none" }}>{p.name}</text>
+              <rect x={p.x - 52} y={pillTop} width="104" height={pillH} rx="3" fill={t.bgCanvas} fillOpacity="0.9" style={{ pointerEvents: "none" }} />
+              <text x={p.x} y={pillTop + 12} textAnchor="middle" fill={active || hovered ? t.yellow : t.textUiStrong}
+                fontSize="11" fontFamily="var(--font-work)" fontWeight="600" style={{ transition: "fill 0.25s", pointerEvents: "none" }}>
+                {labelLines.map((line, i) => (
+                  <tspan key={i} x={p.x} dy={i === 0 ? 0 : lineH}>{line}</tspan>
+                ))}
+              </text>
               <text x={p.x} y={p.y + 4} textAnchor="middle" fill={active ? t.yellow : t.textUi} fontSize="10" fontFamily="var(--font-ui)" fontWeight="500">R:{p.redundancy}</text>
             </g>
           );
         })}
 
-        {/* ENTITY NODES — improved: larger radius, stronger stroke, type-tinted fill */}
+        {/* ENTITY NODES — type-colored stroke; wrapped labels within bounds, margin from node */}
         {layout.entities.map(e => {
           const isSel = selectedEntity === e.id;
           const isConn = selectedPrinciple && e.servesPrinciples.includes(selectedPrinciple);
           const active = isSel || isConn;
           const hovered = hoveredNode === e.id;
-          const col = e.type === "location" ? t.red : e.type === "faction" ? t.yellow : t.blue;
-          const tint = e.type === "location" ? t.redTint : e.type === "faction" ? t.yellowTint : t.blueTint;
+          const col = e.type === "location" ? t.red : e.type === "faction" ? t.yellow : e.type === "instrument" ? t.green : t.blue;
+          const tint = e.type === "location" ? t.redTint : e.type === "faction" ? t.yellowTint : e.type === "instrument" ? t.greenTint : t.blueTint;
           const r = isSel ? 20 : active ? 18 : 16;
+          const labelLines = wrapText(e.name, 14);
+          const lineH = 14;
+          const pillH = 16 + (labelLines.length - 1) * lineH;
+          const pillTop = e.y + r + 6;
           return (
             <g key={e.id} onClick={() => onSelectEntity(isSel ? null : e.id)}
               onMouseEnter={() => setHoveredNode(e.id)} onMouseLeave={() => setHoveredNode(null)} style={{ cursor: "pointer" }}>
-              {/* Outer circle — always visible, strong stroke */}
               <circle cx={e.x} cy={e.y} r={r}
                 fill={active ? tint : hovered ? t.bgHover : t.nodeFill}
-                stroke={active ? col : hovered ? t.textUiLight : t.nodeStroke}
+                stroke={col}
+                strokeOpacity={active ? 1 : 0.5}
                 strokeWidth={active ? 2 : t.nodeStrokeW} style={{ transition: "all 0.25s" }} />
-              {/* Inner icon dot — semantic color pip for type */}
               <circle cx={e.x} cy={e.y} r={4} fill={active || hovered ? col : t.nodeStroke} style={{ transition: "fill 0.25s" }} />
-              {/* Type glyph — rendered inside node */}
               <text x={e.x} y={e.y - r - 0.5} textAnchor="middle" fill={active || hovered ? col : t.textUi} fontSize="10"
-                fontFamily="var(--font-ui)" style={{ pointerEvents: "none" }}>{TYPE_ICON[e.type]}</text>
-              {/* Label — below node with background pill */}
-              <rect x={e.x - 44} y={e.y + r + 4} width="88" height="16" rx="3" fill={t.bgCanvas} fillOpacity="0.9" style={{ pointerEvents: "none" }} />
-              <text x={e.x} y={e.y + r + 15} textAnchor="middle"
+                fontFamily="var(--font-ui)" style={{ pointerEvents: "none" }}>{TYPE_ICON[e.type] || TYPE_ICON.character}</text>
+              <rect x={e.x - 44} y={pillTop} width="88" height={pillH} rx="3" fill={t.bgCanvas} fillOpacity="0.9" style={{ pointerEvents: "none" }} />
+              <text x={e.x} y={pillTop + 12} textAnchor="middle"
                 fill={active || hovered ? t.textUiStrong : t.textUi}
                 fontSize="11" fontFamily="var(--font-work)" fontWeight={active ? "600" : "500"}
-                style={{ transition: "fill 0.25s", pointerEvents: "none" }}>{e.name}</text>
+                style={{ transition: "fill 0.25s", pointerEvents: "none" }}>
+                {labelLines.map((line, i) => (
+                  <tspan key={i} x={e.x} dy={i === 0 ? 0 : lineH}>{line}</tspan>
+                ))}
+              </text>
             </g>
           );
         })}
@@ -1921,8 +2215,9 @@ const VIEWS = [
 ];
 
 export default function Storywright() {
-  const [undoState, dispatch] = useReducer(undoReducer, { past: [], present: SEED, future: [] });
+  const [undoState, dispatch] = useReducer(undoReducer, { past: [], present: EMPTY, future: [] });
   const state = undoState.present;
+  const [ontologyLoading, setOntologyLoading] = useState(true);
   const [surface, setSurface] = useState("conversation");
   const [view, setView] = useState("constellation");
   const [selectedEntity, setSelectedEntity] = useState(null);
@@ -1946,6 +2241,26 @@ export default function Storywright() {
       setShowApiKeyModal(true);
     }
   }, [apiKey, messages.length, surface]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(DEFAULT_ONTOLOGY_PATH)
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error("Not found"))))
+      .then(data => {
+        if (cancelled) return;
+        const parsed = parseAndValidateOntology(data);
+        if (parsed.state) {
+          dispatch({ type: "LOAD_STATE", state: parsed.state });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) dispatch({ type: "LOAD_STATE", state: SEED });
+      })
+      .finally(() => {
+        if (!cancelled) setOntologyLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSaveApiKey = useCallback((key) => {
     try {
@@ -1986,7 +2301,7 @@ export default function Storywright() {
     URL.revokeObjectURL(url);
   }, [state]);
 
-  const handleImport = useCallback(() => {
+  const handleImport = useCallback((useCurated = false) => {
     const input = document.createElement("input"); input.type = "file"; input.accept = ".json";
     input.onchange = e => {
       const file = e.target.files[0]; if (!file) return;
@@ -1994,17 +2309,19 @@ export default function Storywright() {
       reader.onload = ev => {
         try {
           const data = JSON.parse(ev.target.result);
-          // Check if it's a Story Bible format (has meta_thesis or thematic_engine)
-          if (data.meta_thesis || data.thematic_engine) {
-            const converted = convertStoryBibleToOntology(data);
-            dispatch({ type: "LOAD_STATE", state: converted });
+          const parsed = parseAndValidateOntology(data, { curated: useCurated });
+          if (parsed.state) {
+            dispatch({ type: "LOAD_STATE", state: parsed.state });
             setMessages([]);
-          } else if (data.principles && data.entities) {
-            // Standard ontology format
-            dispatch({ type: "LOAD_STATE", state: data });
-            setMessages([]);
+            if (parsed.warnings.length > 0) {
+              console.warn("Import warnings:", parsed.warnings);
+            }
+            if (parsed.errors.length > 0) {
+              alert(`Import completed with validation issues:\n- ${parsed.errors.join("\n- ")}`);
+            }
           } else {
-            alert("Invalid file format. Please import a Story Bible JSON or Storywright ontology JSON.");
+            const details = parsed.errors.length > 0 ? `\n\n${parsed.errors.join("\n")}` : "";
+            alert("Invalid file format. Please import a Story Bible JSON or Storywright ontology JSON." + details);
           }
         } catch (err) {
           alert("Error parsing JSON file: " + err.message);
@@ -2052,6 +2369,15 @@ export default function Storywright() {
       }}>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
+        {ontologyLoading && (
+          <div style={{
+            position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            background: theme.bgCanvas, color: theme.textUiLight, fontSize: "14px", zIndex: 1000,
+          }}>
+            Loading…
+          </div>
+        )}
+
         {/* HEADER — permanent element: opaque, 1px border, no shadow */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 20px", borderBottom: `1px solid ${theme.borderBezel}`, background: theme.bgPane, flexShrink: 0, transition: "background 0.3s, border-color 0.3s", position: "sticky", top: 0, zIndex: 100 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
@@ -2074,7 +2400,8 @@ export default function Storywright() {
             <button onClick={() => setShowMeta(!showMeta)} style={btnStyle(showMeta)}>Meta</button>
             <button onClick={handleNew} style={btnStyle(false)}>New</button>
             <button onClick={handleExport} style={btnStyle(false)}>Export</button>
-            <button onClick={handleImport} style={btnStyle(false)}>Import</button>
+            <button onClick={() => handleImport(false)} style={btnStyle(false)}>Import</button>
+            <button onClick={() => handleImport(true)} style={btnStyle(false)} title="Import characters and core factions only (fewer entities)">Import (Curated)</button>
             {undoState.past.length > 0 && (
               <button onClick={() => dispatch({ type: "UNDO" })} style={btnStyle(false)} title="Undo (Cmd+Z)">
                 ↶ Undo

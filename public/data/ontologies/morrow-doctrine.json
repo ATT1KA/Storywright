@@ -1,0 +1,86 @@
+{
+  "meta": {
+    "title": "The Morrow Doctrine",
+    "subtitle": "The Self-Authored Myth-Maker and the Republic That Armed Him",
+    "coreStatement": "America makes exceptional individuals possible, uses them, and destroys them when they become expensive.",
+    "narrativeArgument": "The gap between American ideals and American practice is wide enough to be genuinely generative — and genuinely fatal."
+  },
+  "principles": [
+    { "id": "p1", "name": "The Conditional License", "definition": "All individual greatness operates on institutional permission. The permission is always conditional, always revocable, and always revoked when the individual's value is exceeded by their cost.", "portability": "universal", "redundancy": 6 },
+    { "id": "p2", "name": "The Self-Portrait as Prison", "definition": "The creator's project inevitably develops independence from its creator, because any sufficiently complex creation acquires its own logic. The creator experiences this independence as betrayal.", "portability": "universal", "redundancy": 4 },
+    { "id": "p3", "name": "The Closing Frontier", "definition": "Exceptional individuals require exceptional environments. When those environments close, the exceptional individual becomes an anachronism reclassified as a threat.", "portability": "universal", "redundancy": 3 },
+    { "id": "p4", "name": "Mirror Blindness", "definition": "The protagonist can diagnose decline and self-deception in every entity except themselves. Their clearest insight into others is powered by their blindest spot about themselves.", "portability": "universal", "redundancy": 5 },
+    { "id": "p5", "name": "Complicity & Liquidation", "definition": "The state uses exceptional individuals for work it cannot acknowledge. When the work becomes expensive, it sacrifices the agent rather than admit its own role.", "portability": "universal", "redundancy": 3 }
+  ],
+  "entities": [
+    { "id": "e1", "name": "Cassian Morrow", "type": "character", "layer": "institutional", "role": "Protagonist — The Self-Authored Myth-Maker", "psychology": "Experiences limits as insults. Ambition as self-expression, not collective vision. Mirror blindness prevents self-diagnosis.", "servesPrinciples": ["p1", "p2", "p3", "p4", "p5"], "shadow": { "dependency": "p1", "ordinariness": "p2", "needForApproval": "p4", "cruelty": "p4" }, "arc": [
+      { "act": 1, "state": "The Knight at peak", "movement": "Seduction by competence" },
+      { "act": 2, "state": "The Builder expressing", "movement": "Vision crystallizes" },
+      { "act": 3, "state": "Appetite consuming", "movement": "Rationalizations elaborate" },
+      { "act": 4, "state": "The Fracture", "movement": "Self-portrait walks away" },
+      { "act": 5, "state": "The Execution", "movement": "Performance of destruction" }
+    ]},
+    { "id": "e2", "name": "Idris Caine", "type": "character", "layer": "institutional", "role": "The Intellectual Spine", "psychology": "Maintains the system because the alternative is worse. Cognitive equal, incompatible orientation.", "servesPrinciples": ["p1", "p5"], "shadow": null, "arc": [
+      { "act": 1, "state": "Mutual assessment", "movement": "Recognition" },
+      { "act": 3, "state": "Pattern documentation", "movement": "Methodical accumulation" },
+      { "act": 5, "state": "Legal opinion delivered", "movement": "Devastating, precise, right" }
+    ]},
+    { "id": "e3", "name": "Solomon Eckhart", "type": "character", "layer": "institutional", "role": "The Road Not Taken", "psychology": "Equal talent, capacity for satisfaction. Can stop. Enough.", "servesPrinciples": ["p1", "p3"], "shadow": null, "arc": [
+      { "act": 1, "state": "Post-war grace", "movement": "Celebration" },
+      { "act": 2, "state": "Gentle warning", "movement": "Concern" },
+      { "act": 5, "state": "Trial testimony", "movement": "Honest, compassionate, damning" }
+    ]},
+    { "id": "e4", "name": "Asa Lorn", "type": "character", "layer": "institutional", "role": "The Deepest Bond", "psychology": "Loyal to the person, not the project. Follows until following means becoming unrecognizable.", "servesPrinciples": ["p4", "p2"], "shadow": null, "arc": [
+      { "act": 1, "state": "Wartime bond", "movement": "Trust forged" },
+      { "act": 3, "state": "Growing unease", "movement": "Questions sharpen" },
+      { "act": 4, "state": "Departure", "movement": "The farewell — emotional climax" }
+    ]},
+    { "id": "e5", "name": "Aurelius Dane", "type": "character", "layer": "institutional", "role": "The Unbridgeable Gap", "psychology": "Loves the creation as community, not self-expression.", "servesPrinciples": ["p2"], "shadow": null, "arc": [
+      { "act": 2, "state": "Public intellectual", "movement": "Engagement" },
+      { "act": 4, "state": "Elected mayor", "movement": "Self-portrait walks away" }
+    ]},
+    { "id": "e6", "name": "Lucan Verge", "type": "character", "layer": "institutional", "role": "The Dark Mirror", "psychology": "Comparable skill, zero self-mythology. Honest mercenary.", "servesPrinciples": ["p4", "p3"], "shadow": null, "arc": [
+      { "act": 1, "state": "Defection", "movement": "Mirror activated" },
+      { "act": 3, "state": "Death by state", "movement": "Precedent established" }
+    ]},
+    { "id": "e7", "name": "Thessaly", "type": "location", "layer": "institutional", "role": "The Self-Portrait in Infrastructure", "psychology": "Built as total self-expression; develops actual life creator cannot control.", "servesPrinciples": ["p2"], "arc": [
+      { "act": 2, "state": "Vision & construction", "movement": "Canvas" },
+      { "act": 3, "state": "Community forms", "movement": "Identity develops" },
+      { "act": 4, "state": "Democratic assertion", "movement": "Dane elected" }
+    ]},
+    { "id": "e8", "name": "USOC", "type": "faction", "layer": "institutional", "role": "The Left Hand / Right Hand", "psychology": "Creates authority, uses capability, builds file, destroys.", "servesPrinciples": ["p1", "p5"], "arc": [
+      { "act": 1, "state": "Issues LMT, covert tasking begins", "movement": "License granted" },
+      { "act": 3, "state": "Dual-tracking", "movement": "File thickens" },
+      { "act": 5, "state": "Disavowal, punitive expedition", "movement": "License revoked" }
+    ]},
+    { "id": "e9", "name": "American-Meridian Co.", "type": "faction", "layer": "institutional", "role": "Dying Institution Mirror", "psychology": "Extraction machine that outlived mandate.", "servesPrinciples": ["p4", "p3"], "arc": [
+      { "act": 2, "state": "Service provider, studied weakness", "movement": "Predator maps prey" },
+      { "act": 3, "state": "Systematic predation", "movement": "Mirror function active" }
+    ]}
+  ],
+  "relationships": [
+    { "id": "r1", "source": "e1", "target": "e2", "type": "Intellectual spine", "dynamic": "Cognitive equals, incompatible orientations", "tension": 0.7, "trajectory": "Assessment → respect → opposition → conviction" },
+    { "id": "r2", "source": "e1", "target": "e3", "type": "Road not taken", "dynamic": "Genuine friendship, divergent capacity for satisfaction", "tension": 0.4, "trajectory": "Bond → concern → grief → testimony" },
+    { "id": "r3", "source": "e1", "target": "e4", "type": "Deepest bond", "dynamic": "Loyalty to person not project", "tension": 0.9, "trajectory": "War bond → partnership → unease → departure" },
+    { "id": "r4", "source": "e1", "target": "e5", "type": "Unbridgeable gap", "dynamic": "Individual will vs. collective vision", "tension": 0.8, "trajectory": "Engagement → divergence → succession" },
+    { "id": "r5", "source": "e1", "target": "e6", "type": "Dark mirror", "dynamic": "Equals who cannot stand equality", "tension": 0.85, "trajectory": "Rivalry → pursuit → death → false conclusion" },
+    { "id": "r6", "source": "e1", "target": "e7", "type": "Creator-creation", "dynamic": "Self-portrait with independent will", "tension": 0.95, "trajectory": "Vision → construction → maturation → independence" },
+    { "id": "r7", "source": "e1", "target": "e8", "type": "License holder-issuer", "dynamic": "Created, used, documented, destroyed", "tension": 0.75, "trajectory": "Authorization → covert ops → file → revocation" },
+    { "id": "r8", "source": "e1", "target": "e9", "type": "Mirror he raids", "dynamic": "Diagnosis as self-description", "tension": 0.6, "trajectory": "Irritation → exploitation → predation" }
+  ],
+  "acts": [
+    { "number": 1, "title": "The Knight", "episodes": "1–7", "tone": "Triumphant, seductive", "question": "Who is Morrow at peak, and what is the hunger he cannot name?" },
+    { "number": 2, "title": "The Builder", "episodes": "8–15", "tone": "Romantic, grounding", "question": "What happens when the Myth-Maker finds his canvas?" },
+    { "number": 3, "title": "The Appetite", "episodes": "16–23", "tone": "Accelerating, uneasy", "question": "What happens when the hunger exceeds every container?" },
+    { "number": 4, "title": "The Fracture", "episodes": "24–30", "tone": "Devastating, quiet", "question": "What happens when everything built develops its own will?" },
+    { "number": 5, "title": "The Execution", "episodes": "31–36", "tone": "Inevitable, magnificent", "question": "What does the Myth-Maker do when the myth reaches its limit?" }
+  ],
+  "expressions": [
+    { "id": "x1", "type": "dialogue", "content": "I can't be smaller than what I've seen.", "character": "e1", "act": 4, "servesPrinciples": ["p4", "p2"], "servesEntity": "e1", "portability": "linguistic", "redundancy": 1, "note": "Ego defense against Shadow need." },
+    { "id": "x2", "type": "dialogue", "content": "The best of us, turned to purposes that were only ever his own.", "character": "e3", "act": 5, "servesPrinciples": ["p1"], "servesEntity": "e3", "portability": "structural", "redundancy": 1, "note": "Affirms greatness, identifies redirection, names selfishness." },
+    { "id": "x3", "type": "dialogue", "content": "I know. That's why I'm leaving.", "character": "e4", "act": 4, "servesPrinciples": ["p4"], "servesEntity": "e4", "portability": "linguistic", "redundancy": 1, "note": "Acknowledgment without accusation." },
+    { "id": "x4", "type": "motif", "content": "I Am What You Celebrate — Confirmation → Pattern → Incomprehension → Haunting Return", "character": "e1", "act": null, "servesPrinciples": ["p1"], "servesEntity": "e1", "portability": "structural", "redundancy": 4, "note": "Morrow's central defense mechanism." },
+    { "id": "x5", "type": "visual", "content": "Mirror motif — reflective surfaces track ego coherence.", "character": "e1", "act": null, "servesPrinciples": ["p4"], "servesEntity": "e1", "portability": "cultural", "redundancy": 3, "note": "Visual tracking of protagonist's disintegrating self-knowledge." },
+    { "id": "x6", "type": "dialogue", "content": "You call it piracy when I do it for myself. What do you call it when you do it through me?", "character": "e1", "act": 5, "servesPrinciples": ["p5", "p1"], "servesEntity": "e1", "portability": "structural", "redundancy": 2, "note": "Trial speech — implicates the audience." }
+  ]
+}
