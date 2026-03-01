@@ -78,6 +78,76 @@ const useT = () => useContext(ThemeCtx);
 const PORT_COLOR_K = { universal: "yellow", structural: "blue", cultural: "red", linguistic: "red" };
 const TYPE_ICON = { character: "◉", faction: "⬡", location: "◇", instrument: "⬢" };
 
+const STORAGE_KEY = "STORYWRIGHT_PROJECTS_V1";
+const STORAGE_LIMIT = 10;
+
+const safeJsonParse = (value, fallback) => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
+const readStoredProjects = () => {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  if (!raw) return [];
+  const parsed = safeJsonParse(raw, []);
+  return Array.isArray(parsed) ? parsed : [];
+};
+
+const cloneState = (state) => safeJsonParse(JSON.stringify(state || {}), {});
+
+const formatTimestampLabel = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  return date.toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+};
+
+const deriveProjectName = (title, date = new Date()) => {
+  const base = (title || "Untitled Project").trim() || "Untitled Project";
+  return `${base} — ${formatTimestampLabel(date)}`;
+};
+
+function useStoredProjects() {
+  const [projects, setProjects] = useState(() => readStoredProjects());
+
+  const persist = useCallback((updater) => {
+    setProjects(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const saveProject = useCallback((payload) => {
+    const record = {
+      id: `proj_${uid()}`,
+      savedAt: Date.now(),
+      ...payload,
+    };
+    persist(prev => [record, ...prev].slice(0, STORAGE_LIMIT));
+    return record;
+  }, [persist]);
+
+  const deleteProject = useCallback((id) => {
+    persist(prev => prev.filter(p => p.id !== id));
+  }, [persist]);
+
+  const refreshProjects = useCallback(() => {
+    setProjects(readStoredProjects());
+  }, []);
+
+  return { projects, saveProject, deleteProject, refreshProjects };
+}
+
 /** Wrap at word boundaries; hyphenated compounds break at hyphen (no mid-word splits). */
 const wrapText = (str, maxChars) => {
   if (!str) return [""];
@@ -1023,6 +1093,173 @@ function Badge({ children, color, small }) {
     }}>
       {children}
     </span>
+  );
+}
+
+
+function FilesMenu({
+  open,
+  anchorRef,
+  projects,
+  statusMessage,
+  warnings,
+  onImport,
+  onSave,
+  onExportCurrent,
+  onLoadProject,
+  onExportProject,
+  onClose,
+  currentProjectTitle,
+}) {
+  const t = useT();
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handler = (event) => {
+      const target = event.target;
+      if (menuRef.current?.contains(target)) return;
+      if (anchorRef?.current?.contains?.(target)) return;
+      onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open, onClose, anchorRef]);
+
+  if (!open) return null;
+
+  const warningItems = (warnings || []).slice(0, 3);
+
+  return (
+    <div
+      ref={menuRef}
+      style={{
+        position: "absolute",
+        top: "58px",
+        right: "24px",
+        width: "320px",
+        padding: "16px",
+        background: t.acrylic,
+        border: `1px solid ${t.borderBezel}`,
+        borderRadius: "8px",
+        boxShadow: t.acrylicShadow,
+        backdropFilter: t.acrylicBlur,
+        WebkitBackdropFilter: t.acrylicBlur,
+        zIndex: 250,
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+      }}
+    >
+      <div>
+        <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "4px" }}>CURRENT PROJECT</div>
+        <div style={{ fontSize: "13px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600 }}>{currentProjectTitle || "Untitled Project"}</div>
+        <div style={{ fontSize: "10px", color: t.textUi, fontFamily: "var(--font-ui)", marginTop: "4px" }}>{statusMessage || "Ready."}</div>
+        {warningItems.length > 0 && (
+          <div style={{ marginTop: "6px", fontSize: "10px", color: t.yellow, fontFamily: "var(--font-ui)" }}>
+            {warningItems.map((warn, idx) => (
+              <div key={idx} style={{ marginBottom: "2px" }}>⚠ {warn}</div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "6px" }}>SAVED ITERATIONS</div>
+        <div style={{ maxHeight: "220px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+          {projects.length === 0 && (
+            <div style={{ padding: "10px", border: `1px dashed ${t.borderBezel}`, borderRadius: "4px", fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-ui)" }}>
+              No saved projects yet.
+            </div>
+          )}
+          {projects.map(project => (
+            <div key={project.id} style={{
+              border: `1px solid ${t.borderBezel}`,
+              borderRadius: "4px",
+              padding: "8px 10px",
+              background: t.bgCanvas,
+              display: "flex",
+              justifyContent: "space-between",
+              gap: "8px",
+              alignItems: "flex-start",
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {project.name}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "10px", color: t.textUiLight, fontFamily: "var(--font-ui)" }}>{formatTimestampLabel(project.savedAt)}</span>
+                  {project.kind && (
+                    <Badge color={project.kind === "import" ? t.blue : t.textUiLight} small>
+                      {project.kind}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <button onClick={() => onLoadProject(project.id)} style={{
+                  fontSize: "10px",
+                  padding: "4px 8px",
+                  borderRadius: "4px",
+                  border: `1px solid ${t.borderBezel}`,
+                  background: "transparent",
+                  color: t.textUi,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-ui)",
+                }}>Load</button>
+                <button onClick={() => onExportProject(project.id)} style={{
+                  fontSize: "10px",
+                  padding: "4px 8px",
+                  borderRadius: "4px",
+                  border: `1px solid ${t.borderBezel}`,
+                  background: "transparent",
+                  color: t.textUiLight,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-ui)",
+                }}>Export</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "8px" }}>
+        <button onClick={onImport} style={{
+          flex: 1,
+          fontSize: "11px",
+          padding: "8px 0",
+          borderRadius: "4px",
+          border: `1px solid ${t.borderBezel}`,
+          background: "transparent",
+          color: t.textUi,
+          cursor: "pointer",
+          fontFamily: "var(--font-ui)",
+        }}>Import</button>
+        <button onClick={onSave} style={{
+          flex: 1,
+          fontSize: "11px",
+          padding: "8px 0",
+          borderRadius: "4px",
+          border: `1px solid ${t.borderBezel}`,
+          background: t.bgActive,
+          color: t.textUiStrong,
+          cursor: "pointer",
+          fontFamily: "var(--font-ui)",
+          fontWeight: 600,
+        }}>Save</button>
+        <button onClick={onExportCurrent} style={{
+          flex: 1,
+          fontSize: "11px",
+          padding: "8px 0",
+          borderRadius: "4px",
+          border: `1px solid ${t.borderBezel}`,
+          background: "transparent",
+          color: t.textUi,
+          cursor: "pointer",
+          fontFamily: "var(--font-ui)",
+        }}>Export</button>
+      </div>
+    </div>
   );
 }
 
@@ -2233,8 +2470,15 @@ export default function Storywright() {
     }
   });
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const filesButtonRef = useRef(null);
+  const [filesMenuOpen, setFilesMenuOpen] = useState(false);
+  const [filesStatus, setFilesStatus] = useState("Ready.");
+  const [filesWarnings, setFilesWarnings] = useState([]);
+  const [currentSourceName, setCurrentSourceName] = useState("Default Ontology");
+  const { projects, saveProject } = useStoredProjects();
 
   const theme = isDark ? DARK : LIGHT;
+  const currentProjectTitle = state.meta.title?.trim() || "Untitled Project";
 
   useEffect(() => {
     if (!apiKey && messages.length === 0 && surface === "conversation") {
@@ -2251,10 +2495,18 @@ export default function Storywright() {
         const parsed = parseAndValidateOntology(data);
         if (parsed.state) {
           dispatch({ type: "LOAD_STATE", state: parsed.state });
+          setFilesStatus("Loaded default ontology");
+          setFilesWarnings(parsed.warnings || []);
+          setCurrentSourceName("Default Ontology");
         }
       })
       .catch(() => {
-        if (!cancelled) dispatch({ type: "LOAD_STATE", state: SEED });
+        if (!cancelled) {
+          dispatch({ type: "LOAD_STATE", state: SEED });
+          setFilesStatus("Loaded seed ontology");
+          setFilesWarnings([]);
+          setCurrentSourceName("Seed Ontology");
+        }
       })
       .finally(() => {
         if (!cancelled) setOntologyLoading(false);
@@ -2294,14 +2546,53 @@ export default function Storywright() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const handleExport = useCallback(() => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const exportOntology = useCallback((payload, filenameHint = "storywright") => {
+    const snapshot = cloneState(payload);
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `${state.meta.title || "storywright"}.json`; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `${filenameHint || "storywright"}.json`; a.click();
     URL.revokeObjectURL(url);
-  }, [state]);
+  }, []);
 
-  const handleImport = useCallback((useCurated = false) => {
+  const handleExport = useCallback(() => {
+    const filename = state.meta.title?.trim() || "storywright";
+    exportOntology(state, filename);
+    setFilesStatus(`Exported “${filename}”`);
+    setFilesWarnings([]);
+  }, [state, exportOntology]);
+
+  const handleSaveProjectSnapshot = useCallback(() => {
+    const snapshot = cloneState(state);
+    const label = deriveProjectName(state.meta.title);
+    const record = saveProject({ name: label, state: snapshot, sourceName: currentSourceName, kind: "save" });
+    setFilesStatus(`Saved “${record.name}”`);
+    setFilesWarnings([]);
+    setFilesMenuOpen(false);
+  }, [state, saveProject, currentSourceName]);
+
+  const handleLoadProject = useCallback((projectId) => {
+    const entry = projects.find(p => p.id === projectId);
+    if (!entry) return;
+    const snapshot = cloneState(entry.state);
+    dispatch({ type: "LOAD_STATE", state: snapshot });
+    setMessages([]);
+    setSelectedEntity(null);
+    setSelectedPrinciple(null);
+    setFilesStatus(`Loaded “${entry.name}”`);
+    setFilesWarnings([]);
+    setCurrentSourceName(entry.sourceName || entry.name);
+    setFilesMenuOpen(false);
+  }, [projects, dispatch]);
+
+  const handleExportProject = useCallback((projectId) => {
+    const entry = projects.find(p => p.id === projectId);
+    if (!entry) return;
+    exportOntology(entry.state, entry.name);
+    setFilesStatus(`Exported “${entry.name}”`);
+    setFilesWarnings([]);
+  }, [projects, exportOntology]);
+
+  const handleImport = useCallback(() => {
     const input = document.createElement("input"); input.type = "file"; input.accept = ".json";
     input.onchange = e => {
       const file = e.target.files[0]; if (!file) return;
@@ -2309,31 +2600,52 @@ export default function Storywright() {
       reader.onload = ev => {
         try {
           const data = JSON.parse(ev.target.result);
-          const parsed = parseAndValidateOntology(data, { curated: useCurated });
+          const parsed = parseAndValidateOntology(data);
           if (parsed.state) {
-            dispatch({ type: "LOAD_STATE", state: parsed.state });
+            const snapshot = cloneState(parsed.state);
+            dispatch({ type: "LOAD_STATE", state: snapshot });
             setMessages([]);
+            setSelectedEntity(null);
+            setSelectedPrinciple(null);
             if (parsed.warnings.length > 0) {
               console.warn("Import warnings:", parsed.warnings);
             }
             if (parsed.errors.length > 0) {
               alert(`Import completed with validation issues:\n- ${parsed.errors.join("\n- ")}`);
             }
+            const fileLabel = file.name || "Imported file";
+            const inferredName = parsed.state?.meta?.title?.trim() || fileLabel.replace(/\.json$/i, "") || deriveProjectName();
+            saveProject({ name: inferredName, state: snapshot, sourceName: fileLabel, kind: "import" });
+            setFilesStatus(`Imported “${fileLabel}”`);
+            setFilesWarnings(parsed.warnings || []);
+            setCurrentSourceName(fileLabel);
+            setFilesMenuOpen(false);
           } else {
             const details = parsed.errors.length > 0 ? `\n\n${parsed.errors.join("\n")}` : "";
             alert("Invalid file format. Please import a Story Bible JSON or Storywright ontology JSON." + details);
+            setFilesStatus("Import failed");
+            setFilesWarnings(parsed.errors || []);
           }
         } catch (err) {
           alert("Error parsing JSON file: " + err.message);
+          setFilesStatus("Import failed");
+          setFilesWarnings([]);
         }
       };
       reader.readAsText(file);
     };
     input.click();
-  }, []);
+  }, [dispatch, saveProject]);
 
   const handleNew = useCallback(() => {
-    dispatch({ type: "LOAD_STATE", state: EMPTY }); setMessages([]); setSurface("conversation"); setSelectedEntity(null); setSelectedPrinciple(null);
+    dispatch({ type: "LOAD_STATE", state: EMPTY });
+    setMessages([]);
+    setSurface("conversation");
+    setSelectedEntity(null);
+    setSelectedPrinciple(null);
+    setFilesStatus("Started new project");
+    setFilesWarnings([]);
+    setCurrentSourceName("New Project");
   }, []);
 
   const layerActivity = useMemo(() => {
@@ -2399,9 +2711,7 @@ export default function Storywright() {
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <button onClick={() => setShowMeta(!showMeta)} style={btnStyle(showMeta)}>Meta</button>
             <button onClick={handleNew} style={btnStyle(false)}>New</button>
-            <button onClick={handleExport} style={btnStyle(false)}>Export</button>
-            <button onClick={() => handleImport(false)} style={btnStyle(false)}>Import</button>
-            <button onClick={() => handleImport(true)} style={btnStyle(false)} title="Import characters and core factions only (fewer entities)">Import (Curated)</button>
+            <button ref={filesButtonRef} onClick={() => setFilesMenuOpen(open => !open)} style={btnStyle(filesMenuOpen)}>Files{projects.length > 0 && <span style={{ marginLeft: "4px", color: theme.green }}>●</span>}</button>
             {undoState.past.length > 0 && (
               <button onClick={() => dispatch({ type: "UNDO" })} style={btnStyle(false)} title="Undo (Cmd+Z)">
                 ↶ Undo
@@ -2422,6 +2732,21 @@ export default function Storywright() {
             <ThemeToggle isDark={isDark} onToggle={() => setIsDark(d => !d)} />
           </div>
         </div>
+
+        <FilesMenu
+          open={filesMenuOpen}
+          anchorRef={filesButtonRef}
+          projects={projects}
+          statusMessage={filesStatus}
+          warnings={filesWarnings}
+          onImport={handleImport}
+          onSave={handleSaveProjectSnapshot}
+          onExportCurrent={handleExport}
+          onLoadProject={handleLoadProject}
+          onExportProject={handleExportProject}
+          onClose={() => setFilesMenuOpen(false)}
+          currentProjectTitle={currentProjectTitle}
+        />
 
         {/* LAYER INDICATOR */}
         <div style={{ display: "flex", height: "2px", flexShrink: 0 }}>
@@ -2524,7 +2849,10 @@ export default function Storywright() {
             <span>▸ {state.acts.length}a</span>
             {undoState.past.length > 0 && <span>↶ {undoState.past.length}</span>}
           </div>
-          <span style={{ letterSpacing: "0.3px" }}>storywright v0.5</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ color: theme.textUi, letterSpacing: "0.2px" }}>{filesStatus}</span>
+            <span style={{ letterSpacing: "0.3px" }}>storywright v0.5</span>
+          </div>
         </div>
       </div>
     </ThemeCtx.Provider>
