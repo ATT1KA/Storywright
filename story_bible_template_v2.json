@@ -1,0 +1,528 @@
+{
+  "schema_version": "2.0",
+  "text_strategy": "canonical_display",
+  "constraint_registry": {
+    "version": "1.0.0",
+    "source": "src/ontology/constraint_registry.json",
+    "notes": "The items below are mirrored from the shared runtime registry. Edit the source file and re-sync, not this template, to avoid divergence.",
+    "items": [
+      { "id": "meta.title", "maxChars": 120, "maxLines": 2, "guideline": "Formal title; 1–2 lines max." },
+      { "id": "meta.subtitle", "maxChars": 70, "maxLines": 2, "guideline": "Arc descriptor or thesis fragment." },
+      { "id": "meta.core_statement", "maxChars": 360, "maxLines": 4, "guideline": "Constitutional argument paragraph." },
+      { "id": "meta.narrative_argument", "maxChars": 360, "maxLines": 4, "guideline": "Explains protagonist compatibility gap." },
+      { "id": "principle.definition", "maxChars": 55, "maxLines": 2, "guideline": "Two-line thesis for Layer Map cards." },
+      { "id": "entity.name", "maxChars": 24, "maxLines": 1, "guideline": "Name must fit ArcTimeline row label." },
+      { "id": "entity.role", "maxChars": 28, "maxLines": 1, "guideline": "Single-line institutional role." },
+      { "id": "entity.psychology", "maxChars": 420, "maxLines": 6, "guideline": "Inspector overview body copy." },
+      { "id": "act.title", "maxChars": 24, "maxLines": 1, "guideline": "Act label in timeline header." },
+      { "id": "act.question", "maxChars": 90, "maxLines": 3, "guideline": "Act dramatic question paragraph." },
+      { "id": "act.tone", "maxChars": 32, "maxLines": 1, "guideline": "Italicized tone tag." },
+      { "id": "arc.beat.state", "maxChars": 26, "maxLines": 1, "guideline": "Bold heading inside beat cell." },
+      { "id": "arc.beat.detail", "maxChars": 65, "maxLines": 2, "guideline": "Body copy inside beat cell." },
+      { "id": "relationship.type", "maxChars": 22, "maxLines": 1, "guideline": "Label in relationship cards/popovers." },
+      { "id": "relationship.dynamic", "maxChars": 45, "maxLines": 2, "guideline": "Italic dynamic description." },
+      { "id": "expression.content", "maxChars": 280, "maxLines": 4, "guideline": "Dialogue or expression snippet." }
+    ]
+  },
+
+  "semantic_registry": {
+    "version": "1.0.0",
+    "source": "src/ontology/semantic_registry.json",
+    "notes": "Contracts define the content type and expected form for each field. LLMs and human authors must adhere to these contracts; importer validation enforces them.",
+    "priority_contracts": [
+      "character.role",
+      "character.function_in_narrative",
+      "character.psychology",
+      "theme.definition",
+      "theme.manifestation",
+      "faction.structural_role",
+      "faction.character",
+      "arc.act",
+      "protagonist.core_trait",
+      "protagonist.the_flaw",
+      "protagonist.the_hunger",
+      "protagonist.core_belief.statement",
+      "relationship.dynamic",
+      "relationship.dramatic_function",
+      "set_piece.thematic_argument"
+    ]
+  },
+
+  "authoring_companion": {
+    "editing_rules": [
+      "Always modify canonical text first; display text is derived and will be overwritten by tooling.",
+      "If you duplicated this template outside the repo, copy the latest constraint registry table along with it.",
+      "When trimming canonical content to satisfy UX limits, prefer rewriting rather than truncating meaning—then rerun validation."
+    ],
+    "validation": "Run `npm run validate:bible` to confirm constraint registry parity and dual-track completeness before sharing with collaborators or LLMs.",
+    "metadata_tip": "Top-level schema_version controls parsers. meta.version is purely narrative revision history."
+  },
+
+  "dual_track_field_map": {
+    "ontology.meta.title": "meta.title",
+    "ontology.meta.subtitle": "meta.subtitle",
+    "ontology.meta.coreStatement": "meta.core_statement",
+    "ontology.meta.narrativeArgument": "meta.narrative_argument",
+    "ontology.principles[].definition": "principle.definition",
+    "ontology.entities[].name": "entity.name",
+    "ontology.entities[].role": "entity.role",
+    "ontology.entities[].psychology": "entity.psychology",
+    "ontology.entities[].arc[].state": "arc.beat.state",
+    "ontology.entities[].arc[].movement": "arc.beat.detail",
+    "ontology.acts[].title": "act.title",
+    "ontology.acts[].question": "act.question",
+    "ontology.acts[].tone": "act.tone",
+    "ontology.relationships[].type": "relationship.type",
+    "ontology.relationships[].dynamic": "relationship.dynamic",
+    "ontology.expressions[].content": "expression.content"
+  },
+
+  "tooling_contract": {
+    "importer": {
+      "description": "Pure function, no LLM calls. Always treat canonical text as source of truth.",
+      "steps": [
+        "Parse JSON. If field is string, wrap into { canonical, display } shape automatically.",
+        "Lookup constraint via constraint_registry and regenerate display.text by clamping canonical text.",
+        "Overwrite any provided display.text with regenerated values.",
+        "Log truncations in meta.changelog (append \"import_truncations\" entry with field paths)."
+      ]
+    },
+    "exporter": {
+      "default_profile": "Emit canonical + display objects exactly as stored after regeneration.",
+      "legacy_profile": "Flatten to canonical strings for downstream tools; warn that display strings will be recomputed on next import."
+    },
+    "state_mutations": {
+      "helper": "updateTextField(path, newCanonical, constraintId)",
+      "rule": "Reducers/UI must call helper whenever a canonical text changes so display text is recalculated immediately."
+    },
+    "metadata_precedence": {
+      "schema_version": "Controls parser behavior and dual-track expectations.",
+      "meta.version": "Tracks narrative revisions only; does not affect importer logic."
+    }
+  },
+
+  "meta": {
+    "document_id": "[STORY_ID]_STORY_BIBLE_v2",
+    "title": {
+      "canonical": "[STORY TITLE — definitive, constitutional phrasing]",
+      "display": { "constraint": "meta.title", "text": "[STORY TITLE]" }
+    },
+    "subtitle": {
+      "canonical": "[SUBTITLE — protagonist arc stated as trajectory]",
+      "display": { "constraint": "meta.subtitle", "text": "[PROTAG ARC]" }
+    },
+    "created": "[YYYY-MM-DD]",
+    "updated": "[YYYY-MM-DD]",
+    "version": "2.0",
+    "document_purpose": "Canonical story bible and ground truth reference for all narrative development.",
+    "usage_instructions": {
+      "for_ai_models": "Treat canonical fields as constitutional truth. When editing, write to canonical text; display text is auto-derived via constraints.",
+      "hierarchy_of_authority": [
+        "1. meta_thesis + thematic_engine",
+        "2. protagonist_architecture",
+        "3. character_definitions",
+        "4. faction_definitions",
+        "5. narrative_structure",
+        "6. world_building",
+        "7. tone_and_aesthetic"
+      ],
+      "drift_prevention": "Before committing output, confirm canonical text still proves the meta_thesis, then allow tooling to clamp displays."
+    },
+    "text_strategy": "display strings are deterministic clamps of canonical strings; do not attempt to hand-author display text unless instructed, because importer will overwrite it.",
+    "changelog": {
+      "v1.0": "Initial canonical story bible.",
+      "v2.0": "Introduced canonical/display dual-track schema with constraint registry."
+    }
+  },
+
+  "meta_thesis": {
+    "_instructions": "The meta_thesis is the constitutional layer. Fill canonical text richly; display text keeps UI legible.",
+    "core_statement": {
+      "canonical": "[THE STORY'S CENTRAL ARGUMENT IN 2-4 SENTENCES.]",
+      "display": { "constraint": "meta.core_statement", "text": "[Concise argument for UI surfaces]" }
+    },
+    "narrative_argument": {
+      "canonical": "[HOW THE PROTAGONIST EMBODIES THE CORE STATEMENT.]",
+      "display": { "constraint": "meta.narrative_argument", "text": "[Shortened articulation]" }
+    },
+    "structural_parallel": "[STRUCTURAL CONTRIBUTION FROM REAL-WORLD/LITERARY ANTECEDENT]",
+    "audience_contract": "[EMOTIONAL CONTRACT WITH AUDIENCE]",
+    "thematic_summary": "[OPTIONAL DISTILLATION]"
+  },
+
+  "thematic_engine": {
+    "_instructions": "Primary themes are load-bearing walls. Follow semantic contracts theme.definition + theme.manifestation for content/register. Canonical text can exceed UX limits if the data never surfaces directly; otherwise use dual-track objects.",
+    "primary_themes": [
+      {
+        "theme": "[THEME NAME]",
+        "definition": "[ABSTRACT PRINCIPLE]",
+        "manifestation": "[HOW IT APPEARS IN THIS STORY]"
+      }
+    ],
+    "structural_truths": [
+      "[AXIOMATIC STATEMENT 1]",
+      "[AXIOMATIC STATEMENT 2]",
+      "[AXIOMATIC STATEMENT 3]"
+    ]
+  },
+
+  "protagonist_architecture": {
+    "_instructions": "Second-highest authority after meta_thesis. Contracts: protagonist.core_trait, protagonist.the_flaw, protagonist.the_hunger, protagonist.core_belief.statement describe expected voice/register.",
+    "name": {
+      "canonical": "[FULL NAME]",
+      "display": { "constraint": "entity.name", "text": "[Name fits Arc Timeline]" }
+    },
+    "title": {
+      "canonical": "[PUBLIC TITLE OR ROLE]",
+      "display": { "constraint": "entity.role", "text": "[Concise Title]" }
+    },
+    "profession": "[SPECIFIC PROFESSIONAL IDENTITY]",
+    "key_possessions": "[SIGNATURE OBJECTS]",
+    "archetype": "[ARCHETYPE LABEL]",
+    "archetype_lineage": [
+      "[CHARACTER 1 — contribution]",
+      "[CHARACTER 2 — contribution]"
+    ],
+    "psychology": {
+      "core_trait": "[DEFINING FACT]",
+      "origin": "[FORMATIVE BACKGROUND]",
+      "the_hunger": "[IRRATIONAL DRIVE]",
+      "the_performance": "[PUBLIC MASK]",
+      "the_flaw": "[STRUCTURAL DEFICIENCY]",
+      "the_blind_spot": "[UNSEEN TRUTH]",
+      "relationship_to_power": "[MEDIUM OF SELF-EXPRESSION]",
+      "core_belief": {
+        "statement": "[FIRST-PERSON JUSTIFICATION]",
+        "why_it_works": "[REASON BELIEF IS COMPELLING]",
+        "how_it_drives_action": "[PLOT CONSEQUENCE]",
+        "how_opposition_registers": "[PROTAGONIST PERCEPTION OF PUSHBACK]",
+        "why_opponents_feel_discomfort": "[MORAL FRICTION FOR OTHERS]"
+      }
+    },
+    "arc_logic": {
+      "act_one": "[PROTAGONIST STATE]",
+      "act_two": "[STATE]",
+      "act_three": "[STATE]",
+      "act_four": "[STATE]",
+      "act_five": "[STATE]"
+    },
+    "fate": "[STRUCTURAL OUTCOME]",
+    "legacy": "[WHAT SURVIVES]",
+    "arc_movements": [
+      {
+        "movement": 1,
+        "title": "[MOVEMENT TITLE]",
+        "acts": "[ACT RANGE]",
+        "audience_experience": "[FEELING]",
+        "key_dynamic": "[MECHANISM]",
+        "relatability_engine": "[HUMAN EXPERIENCE]"
+      }
+    ]
+  },
+
+  "ontology_payload": {
+    "_instructions": "This section mirrors the runtime data structure Storywright uses. Every text field shown in UX is dual-track.",
+    "meta": {
+    "title": {
+      "canonical": "[TITLE]",
+      "display": { "constraint": "meta.title", "text": "[TITLE]", "clamp_strategy_used": "label_extract" },
+      "contract": null
+    },
+    "subtitle": {
+      "canonical": "[SUBTITLE]",
+      "display": { "constraint": "meta.subtitle", "text": "[SUBTITLE]", "clamp_strategy_used": "label_extract" },
+      "contract": null
+    },
+    "coreStatement": {
+      "canonical": "[CORE STATEMENT]",
+      "display": { "constraint": "meta.core_statement", "text": "[SHORT CORE]", "clamp_strategy_used": "first_sentence" },
+      "contract": null
+    },
+    "narrativeArgument": {
+      "canonical": "[NARRATIVE ARGUMENT]",
+      "display": { "constraint": "meta.narrative_argument", "text": "[SHORT ARG]", "clamp_strategy_used": "first_sentence" },
+      "contract": null
+    }
+    },
+    "principles": [
+      {
+        "id": "p_001",
+        "name": {
+          "canonical": "[PRINCIPLE NAME]",
+          "display": { "constraint": "entity.name", "text": "[PRINCIPLE NAME]", "clamp_strategy_used": "label_extract" },
+          "contract": null
+        },
+        "definition": {
+          "canonical": "[FULL DEFINITION]",
+          "display": { "constraint": "principle.definition", "text": "[Two-line summary]", "clamp_strategy_used": "first_clause" },
+          "contract": null
+        },
+        "redundancy": 2,
+        "portability": "universal"
+      }
+    ],
+    "entities": [
+      {
+        "id": "e_001",
+        "type": "character",
+        "name": {
+          "canonical": "[CHARACTER NAME]",
+          "display": { "constraint": "entity.name", "text": "[CHAR NAME]", "clamp_strategy_used": "label_extract" },
+          "contract": null
+        },
+        "role": {
+          "canonical": "[ROLE / INSTITUTIONAL FUNCTION]",
+          "display": { "constraint": "entity.role", "text": "[ROLE SHORT]", "clamp_strategy_used": "label_extract" },
+          "contract": "character.role"
+        },
+        "psychology": {
+          "canonical": "[FULL INTERNAL LOGIC]",
+          "display": { "constraint": "entity.psychology", "text": "[Inspector-safe summary]", "clamp_strategy_used": "first_sentence" },
+          "contract": "character.psychology"
+        },
+        "servesPrinciples": ["p_001"],
+        "arc": [
+          {
+            "act": 1,
+            "state": { "canonical": "[STATE DETAIL]", "display": { "constraint": "arc.beat.state", "text": "[STATE SHORT]" } },
+            "movement": { "canonical": "[MOVEMENT DETAIL]", "display": { "constraint": "arc.beat.detail", "text": "[MOVEMENT SHORT]" } }
+          }
+        ]
+      }
+    ],
+    "acts": [
+      {
+        "number": 1,
+        "title": {
+          "canonical": "[ACT TITLE]",
+          "display": { "constraint": "act.title", "text": "[ACT TITLE]", "clamp_strategy_used": "label_extract" },
+          "contract": "arc.act"
+        },
+        "question": {
+          "canonical": "[CENTRAL QUESTION]",
+          "display": { "constraint": "act.question", "text": "[SHORT QUESTION]", "clamp_strategy_used": "first_sentence" },
+          "contract": "arc.act"
+        },
+        "tone": {
+          "canonical": "[TONAL REGISTER]",
+          "display": { "constraint": "act.tone", "text": "[Tone Short]", "clamp_strategy_used": "label_extract" },
+          "contract": null
+        }
+      }
+    ],
+    "relationships": [
+      {
+        "id": "r_001",
+        "source": "e_001",
+        "target": "e_002",
+        "type": {
+          "canonical": "[RELATIONSHIP TYPE]",
+          "display": { "constraint": "relationship.type", "text": "[Type Short]", "clamp_strategy_used": "label_extract" },
+          "contract": null
+        },
+        "dynamic": {
+          "canonical": "[DYNAMIC DETAIL]",
+          "display": { "constraint": "relationship.dynamic", "text": "[Dynamic Short]", "clamp_strategy_used": "first_clause" },
+          "contract": "relationship.dynamic"
+        },
+        "tension": 0.6
+      }
+    ],
+    "expressions": [
+      {
+        "id": "x_001",
+        "type": "dialogue",
+        "content": {
+          "canonical": "[FULL LINE OR DESCRIPTION]",
+          "display": { "constraint": "expression.content", "text": "[Trimmed quote for UX]", "clamp_strategy_used": "first_sentence" },
+          "contract": null
+        },
+        "character": "e_001",
+        "portability": "linguistic",
+        "redundancy": 2
+      }
+    ]
+  },
+
+  "character_definitions": {
+    "_instructions": "Define characters by function relative to protagonist. Contracts: character.role, character.function_in_narrative, character.psychology govern tone and structure.",
+    "core_cast": [
+      {
+        "name": { "canonical": "[CHARACTER NAME]", "display": { "constraint": "entity.name", "text": "[CHAR NAME]" } },
+        "role": { "canonical": "[ROLE]", "display": { "constraint": "entity.role", "text": "[ROLE SHORT]" } },
+        "function_in_narrative": "[STRUCTURAL FUNCTION]",
+        "psychology": "[CORE PSYCHOLOGY]",
+        "relationship_to_protagonist": "[DYNAMIC]",
+        "arc": "[CHANGE TRAJECTORY]",
+        "key_scenes": [ "[SCENE 1]", "[SCENE 2]" ]
+      }
+    ]
+  },
+
+  "faction_definitions": {
+    "factions": [
+      {
+        "name": "[FACTION NAME]",
+        "status": "[ASCENDING/DECLINING]",
+        "archetype": "[INSTITUTIONAL TYPE]",
+        "structural_role": "[THEMATIC ROLE]",
+        "character": "[FACTION PERSONALITY]",
+        "current_state": "[WHERE IT STANDS AT STORY START]",
+        "key_mechanism": "[PRIMARY POWER EXERCISE]",
+        "relationship_to_protagonist": "[DYNAMIC]",
+        "internal_tensions": "[CONFLICTS]"
+      }
+    ]
+  },
+
+  "narrative_structure": {
+    "_instructions": "Arc act summaries follow semantic contract arc.act — describe protagonist state, not plot recap.",
+    "format": "[MEDIUM AND SCOPE]",
+    "genre_registers": [
+      "[GENRE TEXTURE 1]",
+      "[GENRE TEXTURE 2]"
+    ],
+    "governing_principle": "[SINGLE STRUCTURAL LAW]",
+    "acts": [
+      {
+        "act_number": 1,
+        "title": "[ACT TITLE]",
+        "episodes": "[RANGE]",
+        "central_question": "[DRAMATIC QUESTION]",
+        "tone": "[EMOTIONAL REGISTER]",
+        "protagonist_state": "[STATE]",
+        "key_events": [ "[EVENT 1]", "[EVENT 2]" ]
+      }
+    ]
+  },
+
+  "world_building": {
+    "time_period": "[WHEN/WHY]",
+    "technology_notes": "[KEY TECHNOLOGY FACTS]",
+    "key_instruments": {
+      "instrument_1": {
+        "name": "[INSTRUMENT NAME]",
+        "description": "[WHAT IT IS]",
+        "critical_function": "[WHAT IT DOES IN WORLD]",
+        "narrative_function": "[THEMATIC FUNCTION]"
+      }
+    },
+    "geography": {
+      "location_1": "[LOCATION DESCRIPTION]",
+      "location_2": "[LOCATION DESCRIPTION]"
+    },
+    "key_historical_events": {
+      "event_1": {
+        "name": "[EVENT NAME]",
+        "description": "[WHAT HAPPENED]",
+        "outcome": "[IMMEDIATE RESULT]",
+        "consequence": "[ONGOING IMPACT]"
+      }
+    }
+  },
+
+  "tone_and_aesthetic": {
+    "overall_register": "[DOMINANT MODE]",
+    "visual_philosophy": "[HOW IT LOOKS]",
+    "combat_or_action_register": "[ACTION FEEL]",
+    "social_register": "[INTERPERSONAL TEXTURE]",
+    "emotional_targets_by_act": {
+      "act_one": "[FEELING]",
+      "act_two": "[FEELING]",
+      "act_three": "[FEELING]",
+      "act_four": "[FEELING]",
+      "act_five": "[FEELING]"
+    }
+  },
+
+  "relationship_matrix": {
+    "_instructions": "Use contracts relationship.dynamic + relationship.dramatic_function to keep registers consistent.",
+    "relationships": [
+      {
+        "pair": "[CHARACTER A] — [CHARACTER B]",
+        "type": { "canonical": "[TYPE DETAIL]", "display": { "constraint": "relationship.type", "text": "[Type Short]" } },
+        "dynamic": { "canonical": "[DYNAMIC DETAIL]", "display": { "constraint": "relationship.dynamic", "text": "[Dynamic Short]" } },
+        "trajectory": "[RELATIONSHIP CHANGE]",
+        "dramatic_function": "[WHAT IT REVEALS]"
+      }
+    ]
+  },
+
+  "jungian_shadow_architecture": {
+    "framework": "[HOW SHADOW OPERATES]",
+    "protagonist_ego_claims": ["[CLAIM 1]", "[CLAIM 2]"]
+  },
+
+  "protagonist_expression_guide": {
+    "physical_presentation": {
+      "bearing": {
+        "principle": "[HOW THEY MOVE]",
+        "early_story": "[BEARING EARLY]",
+        "late_story": "[BEARING LATE]"
+      }
+    },
+    "dialogue_registers": {
+      "governing_principle": "[VOICE DNA]",
+      "early_register": {
+        "name": "[LABEL]",
+        "acts": "[ACT RANGE]",
+        "quality": "[SOUND]",
+        "mechanism": "[WHY]",
+        "example_texture": "[SAMPLE LINE]"
+      }
+    },
+    "visual_language": {
+      "framing_principle": "[CAMERA APPROACH]",
+      "recurring_motif": {
+        "description": "[MOTIF]",
+        "early": "[EARLY STATE]",
+        "middle": "[MIDDLE STATE]",
+        "late": "[LATE STATE]"
+      }
+    }
+  },
+
+  "set_piece_architecture": {
+    "_instructions": "Contracts such as set_piece.thematic_argument ensure spectacle notes stay tethered to theme.",
+    "governing_principles": {
+      "triple_requirement": "Every set piece must deliver spectacle, advance character, and argue theme.",
+      "escalation_principle": "[WHAT SCALES ACROSS SET PIECES]"
+    },
+    "set_pieces": [
+      {
+        "number": 1,
+        "title": "[SET PIECE TITLE]",
+        "act": "[ACT]",
+        "type": "[CATEGORY]",
+        "description": "[WHAT HAPPENS]",
+        "spectacle": "[VISUAL HOOK]",
+        "character_reveal": "[CHARACTER INSIGHT]",
+        "thematic_argument": "[THEME PUSH]"
+      }
+    ]
+  },
+
+  "appendices": {
+    "naming_conventions": {
+      "principle": "Names carry thematic weight; document intent for each primary noun.",
+      "notes": {
+        "[CHARACTER]": "[NAME SIGNIFICANCE]"
+      }
+    },
+    "historical_parallel_guide": {
+      "primary_parallel": "[MAIN SOURCE]",
+      "structural_parallels": ["[PARALLEL 1]", "[PARALLEL 2]"],
+      "usage_note": "Parallels are structural, not decorative."
+    },
+    "anti_drift_checklist": {
+      "description": "Use before finalizing any scene, chapter, or ontology edit.",
+      "questions": [
+        "Does this serve the meta_thesis?",
+        "Does the canonical text still align with protagonist_architecture?",
+        "Do display summaries respect their constraint IDs?",
+        "Have all modified fields been routed through updateTextField?",
+        "Would trimming the display text change the meaning? If yes, revise canonical text."
+      ]
+    }
+  }
+}

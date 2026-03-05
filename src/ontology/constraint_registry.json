@@ -1,0 +1,165 @@
+{
+  "version": "1.0.0",
+  "items": [
+    {
+      "id": "meta.title",
+      "maxChars": 120,
+      "maxLines": 2,
+      "guideline": "Formal title; 1–2 lines max.",
+      "clamp_strategy": "label_extract",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inline",
+      "semantic_contract": null
+    },
+    {
+      "id": "meta.subtitle",
+      "maxChars": 70,
+      "maxLines": 2,
+      "guideline": "Arc descriptor or thesis fragment.",
+      "clamp_strategy": "label_extract",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inline",
+      "semantic_contract": null
+    },
+    {
+      "id": "meta.core_statement",
+      "maxChars": 360,
+      "maxLines": 4,
+      "guideline": "Constitutional argument paragraph.",
+      "clamp_strategy": "first_sentence",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inspector",
+      "semantic_contract": null
+    },
+    {
+      "id": "meta.narrative_argument",
+      "maxChars": 360,
+      "maxLines": 4,
+      "guideline": "Explains protagonist compatibility gap.",
+      "clamp_strategy": "first_sentence",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inspector",
+      "semantic_contract": null
+    },
+    {
+      "id": "principle.definition",
+      "maxChars": 55,
+      "maxLines": 2,
+      "guideline": "Two-line thesis for Layer Map cards.",
+      "clamp_strategy": "first_clause",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inline",
+      "semantic_contract": null
+    },
+    {
+      "id": "entity.name",
+      "maxChars": 24,
+      "maxLines": 1,
+      "guideline": "Name must fit ArcTimeline row label.",
+      "clamp_strategy": "label_extract",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inline",
+      "semantic_contract": null
+    },
+    {
+      "id": "entity.role",
+      "maxChars": 28,
+      "maxLines": 1,
+      "guideline": "Single-line institutional role.",
+      "clamp_strategy": "label_extract",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inline",
+      "semantic_contract": "character.role"
+    },
+    {
+      "id": "entity.psychology",
+      "maxChars": 420,
+      "maxLines": 6,
+      "guideline": "Inspector overview body copy.",
+      "clamp_strategy": "first_sentence",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inspector",
+      "semantic_contract": "character.psychology"
+    },
+    {
+      "id": "act.title",
+      "maxChars": 24,
+      "maxLines": 1,
+      "guideline": "Act label in timeline header.",
+      "clamp_strategy": "label_extract",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inline",
+      "semantic_contract": "arc.act"
+    },
+    {
+      "id": "act.question",
+      "maxChars": 90,
+      "maxLines": 3,
+      "guideline": "Act dramatic question paragraph.",
+      "clamp_strategy": "first_sentence",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inspector",
+      "semantic_contract": "arc.act"
+    },
+    {
+      "id": "act.tone",
+      "maxChars": 32,
+      "maxLines": 1,
+      "guideline": "Italicized tone tag.",
+      "clamp_strategy": "label_extract",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inline",
+      "semantic_contract": null
+    },
+    {
+      "id": "arc.beat.state",
+      "maxChars": 26,
+      "maxLines": 1,
+      "guideline": "Bold heading inside beat cell.",
+      "clamp_strategy": "label_extract",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inline",
+      "semantic_contract": null
+    },
+    {
+      "id": "arc.beat.detail",
+      "maxChars": 65,
+      "maxLines": 2,
+      "guideline": "Body copy inside beat cell.",
+      "clamp_strategy": "first_clause",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inline",
+      "semantic_contract": null
+    },
+    {
+      "id": "relationship.type",
+      "maxChars": 22,
+      "maxLines": 1,
+      "guideline": "Label in relationship cards/popovers.",
+      "clamp_strategy": "label_extract",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inline",
+      "semantic_contract": null
+    },
+    {
+      "id": "relationship.dynamic",
+      "maxChars": 45,
+      "maxLines": 2,
+      "guideline": "Italic dynamic description.",
+      "clamp_strategy": "first_clause",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inspector",
+      "semantic_contract": "relationship.dynamic"
+    },
+    {
+      "id": "expression.content",
+      "maxChars": 280,
+      "maxLines": 4,
+      "guideline": "Dialogue or expression snippet.",
+      "clamp_strategy": "first_sentence",
+      "clamp_fallback": "truncate",
+      "editing_mode": "inspector",
+      "semantic_contract": null
+    }
+  ]
+}

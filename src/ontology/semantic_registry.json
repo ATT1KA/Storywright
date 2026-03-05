@@ -1,0 +1,140 @@
+{
+  "registry_version": "1.0.0",
+  "contracts": {
+    "character.role": {
+      "content_type": "institutional_position",
+      "semantic_definition": "The character's formal title, rank, or institutional affiliation within the story's world. Specifies how the world categorizes their authority or function.",
+      "expected_form": "noun_phrase",
+      "example": "Senior Claims Magistrate, Helios Prize Court",
+      "anti_example": "A brilliant legal mind who has spent decades navigating interplanetary bureaucracies",
+      "anti_example_reason": "Describes psychology/backstory instead of a formal position.",
+      "length_guidance": { "typical_range": [20, 120], "outlier_threshold": 200 }
+    },
+    "character.function_in_narrative": {
+      "content_type": "structural_role",
+      "semantic_definition": "Explains what this character does for the story's argument — their mechanical/thematic function relative to the protagonist and meta thesis.",
+      "expected_form": "declarative_paragraph",
+      "example": "The intellectual spine who sees Morrow most clearly because their profession is examining the gap between law and practice.",
+      "anti_example": "Provides important legal context for the story.",
+      "anti_example_reason": "Too vague; does not describe a structural function.",
+      "length_guidance": { "typical_range": [100, 500], "outlier_threshold": 800 }
+    },
+    "character.psychology": {
+      "content_type": "behavioral_observation",
+      "semantic_definition": "Defining psychological fact about the character — a behavioral observation showing how they operate and why.",
+      "expected_form": "declarative_paragraph",
+      "example": "Caine maintains the system because the alternative is worse; equal in talent to Morrow but oriented toward preservation over reinvention.",
+      "anti_example": "Intelligent, analytical, somewhat cold but fair.",
+      "anti_example_reason": "Trait list rather than a behavioral observation.",
+      "length_guidance": { "typical_range": [80, 400], "outlier_threshold": 600 }
+    },
+    "theme.definition": {
+      "content_type": "abstract_principle",
+      "semantic_definition": "Universal statement of the theme in abstract terms, independent of the story's specifics.",
+      "expected_form": "declarative_sentence",
+      "example": "Institutions calcify when they confuse procedural adherence with moral legitimacy.",
+      "anti_example": "How the Helios Court works.",
+      "anti_example_reason": "Describes a setting detail instead of an abstract theme.",
+      "length_guidance": { "typical_range": [40, 160], "outlier_threshold": 260 }
+    },
+    "theme.manifestation": {
+      "content_type": "story_specific_application",
+      "semantic_definition": "Describes how the theme shows up in this story's people, institutions, and events.",
+      "expected_form": "declarative_paragraph",
+      "example": "Embodied by Caine's loyalty to legal instruments contrasted with Morrow's willingness to weaponize them.",
+      "anti_example": "Shows up everywhere.",
+      "anti_example_reason": "Non-specific; lacks anchors to story elements.",
+      "length_guidance": { "typical_range": [60, 320], "outlier_threshold": 500 }
+    },
+    "faction.structural_role": {
+      "content_type": "institutional_function",
+      "semantic_definition": "Explains which structural position the faction occupies in the narrative argument (e.g., system preservers, opportunists).",
+      "expected_form": "declarative_sentence",
+      "example": "Acts as the legal immune system that prevents charismatic actors from rewriting precedent overnight.",
+      "anti_example": "They are a powerful organization.",
+      "anti_example_reason": "Does not state structural role.",
+      "length_guidance": { "typical_range": [50, 180], "outlier_threshold": 280 }
+    },
+    "faction.character": {
+      "content_type": "institutional_psychology",
+      "semantic_definition": "Describes how the faction behaves — its values, temperament, and decision patterns.",
+      "expected_form": "declarative_paragraph",
+      "example": "Cold, procedural, and allergic to improvisation; treats every problem as an audit trail to be reconciled.",
+      "anti_example": "They are mean.",
+      "anti_example_reason": "Non-specific and childish register.",
+      "length_guidance": { "typical_range": [50, 250], "outlier_threshold": 400 }
+    },
+    "arc.act": {
+      "content_type": "arc_state",
+      "semantic_definition": "Describes the protagonist's psychological and situational state during the act — beliefs, assets, blind spots.",
+      "expected_form": "declarative_paragraph",
+      "example": "Act Two: intoxicated by new leverage, convinced the system can be bent indefinitely; euphoric but blind to collateral damage.",
+      "anti_example": "Lots of stuff happens.",
+      "anti_example_reason": "Does not describe protagonist state.",
+      "length_guidance": { "typical_range": [80, 280], "outlier_threshold": 420 }
+    },
+    "protagonist.core_trait": {
+      "content_type": "behavioral_observation",
+      "semantic_definition": "Single defining psychological fact from which all other behavior flows.",
+      "expected_form": "declarative_sentence",
+      "example": "Believes systems exist to be bent into alignment with their personal thesis.",
+      "anti_example": "Stubborn and smart.",
+      "anti_example_reason": "Adjective list.",
+      "length_guidance": { "typical_range": [40, 140], "outlier_threshold": 220 }
+    },
+    "protagonist.the_flaw": {
+      "content_type": "structural_incompatibility",
+      "semantic_definition": "Explains why the protagonist cannot coexist with the world as-is — the inevitability of their downfall/transformation.",
+      "expected_form": "declarative_sentence",
+      "example": "Cannot distinguish between necessary structural stress and wanton destruction of collective trust.",
+      "anti_example": "Gets angry sometimes.",
+      "anti_example_reason": "Too trivial; not structural.",
+      "length_guidance": { "typical_range": [50, 180], "outlier_threshold": 260 }
+    },
+    "protagonist.the_hunger": {
+      "content_type": "irrational_drive",
+      "semantic_definition": "Names the appetite pushing the protagonist beyond rational self-interest.",
+      "expected_form": "declarative_sentence",
+      "example": "Needs every institution to testify that his thesis is correct, even if it means breaking them to extract a confession.",
+      "anti_example": "Wants to win.",
+      "anti_example_reason": "Too vague and generic.",
+      "length_guidance": { "typical_range": [50, 160], "outlier_threshold": 240 }
+    },
+    "protagonist.core_belief.statement": {
+      "content_type": "first_person_statement",
+      "semantic_definition": "How the protagonist would justify their existence in their own voice.",
+      "expected_form": "first_person_statement",
+      "example": "I fix what lesser minds break, even if I have to break them to do it.",
+      "anti_example": "He thinks he fixes things.",
+      "anti_example_reason": "Not in first person.",
+      "length_guidance": { "typical_range": [40, 160], "outlier_threshold": 220 }
+    },
+    "relationship.dynamic": {
+      "content_type": "relational_tension",
+      "semantic_definition": "Explains how the relationship feels moment-to-moment — the push/pull dynamic.",
+      "expected_form": "declarative_sentence",
+      "example": "Mutual admiration poisoned by incompatible definitions of loyalty.",
+      "anti_example": "They argue a lot.",
+      "anti_example_reason": "Too shallow; lacks theme linkage.",
+      "length_guidance": { "typical_range": [40, 150], "outlier_threshold": 220 }
+    },
+    "relationship.dramatic_function": {
+      "content_type": "thematic_function",
+      "semantic_definition": "What this relationship reveals about the meta thesis or protagonist.",
+      "expected_form": "declarative_sentence",
+      "example": "Shows how institutional loyalty collapses when personal myth-making becomes contagious.",
+      "anti_example": "Important relationship.",
+      "anti_example_reason": "No thematic insight.",
+      "length_guidance": { "typical_range": [60, 200], "outlier_threshold": 280 }
+    },
+    "set_piece.thematic_argument": {
+      "content_type": "set_piece_argument",
+      "semantic_definition": "States the theme this set piece demonstrates, tying spectacle to thesis.",
+      "expected_form": "declarative_sentence",
+      "example": "Confirms that Morrow can win any confrontation except the one with collective belief.",
+      "anti_example": "Cool action scene.",
+      "anti_example_reason": "Describes spectacle, not theme.",
+      "length_guidance": { "typical_range": [60, 200], "outlier_threshold": 260 }
+    }
+  }
+}

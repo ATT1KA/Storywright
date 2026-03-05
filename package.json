@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "validate:bible": "node scripts/validate-bible.js",
+    "test:clamp": "node scripts/test-clamp.js"
   },
   "dependencies": {
     "react": "^18.2.0",
