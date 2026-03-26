@@ -7,7 +7,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "validate:bible": "node scripts/validate-bible.js",
-    "test:clamp": "node scripts/test-clamp.js"
+    "test:clamp": "node scripts/test-clamp.js",
+    "test:validate": "node scripts/test-validate.js"
   },
   "dependencies": {
     "react": "^18.2.0",

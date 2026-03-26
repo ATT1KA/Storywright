@@ -1,4 +1,9 @@
 import { useState, useCallback, useMemo, useEffect, useRef, useReducer, createContext, useContext } from "react";
+import { deriveDisplayText, deriveAllDisplayFields } from "./src/ontology/deriveDisplay.js";
+import { exportWithDualTrack } from "./src/ontology/exportDualTrack.js";
+import { getEditMode, getFieldHint } from "./src/ontology/editMode.js";
+import { runFullValidation } from "./src/ontology/validate.js";
+import { buildSystemPromptAddendum } from "./src/ontology/llmContext.js";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STORYWRIGHT v0.5 — High-Contrast Tactile Writing Environment + Dark Mode
@@ -262,7 +267,12 @@ function parseAndValidateOntology(data, opts = {}) {
   }
 
   if (Array.isArray(data.principles) && Array.isArray(data.entities)) {
-    return { state: data, warnings: [], errors: [] };
+    const validation = runFullValidation(data);
+    return {
+      state: data,
+      warnings: validation.warnings.map(w => `[${w.code}] ${w.field_path || w.scope}: ${w.message}`),
+      errors: validation.errors.map(e => `[${e.code}] ${e.field_path || e.scope}: ${e.message}`),
+    };
   }
 
   const isStoryBible = [
@@ -282,10 +292,19 @@ function parseAndValidateOntology(data, opts = {}) {
 
   const normalized = normalizeStoryBible(data);
   const converted = convertStoryBibleToOntology(normalized.storyBible, opts);
+  const validation = converted.state ? runFullValidation(converted.state) : { warnings: [], errors: [] };
   return {
     state: converted.state,
-    warnings: [...normalized.warnings, ...converted.warnings],
-    errors: [...normalized.errors, ...converted.errors],
+    warnings: [
+      ...normalized.warnings,
+      ...converted.warnings,
+      ...validation.warnings.map(w => `[${w.code}] ${w.field_path || w.scope}: ${w.message}`),
+    ],
+    errors: [
+      ...normalized.errors,
+      ...converted.errors,
+      ...validation.errors.map(e => `[${e.code}] ${e.field_path || e.scope}: ${e.message}`),
+    ],
   };
 }
 
@@ -941,6 +960,24 @@ function buildContext(state) {
     uninstP.forEach(p => { ctx += `  ⚠ ${p.name} has no entity instantiation\n`; });
     lowR.forEach(x => { ctx += `  ⚠ "${x.content}" has redundancy 1 (single point of failure)\n`; });
   }
+
+  // Semantic contract injection: include relevant contracts for active section types
+  const activeSections = [];
+  if (state.entities.length > 0) activeSections.push('entity');
+  if (state.principles.length > 0) activeSections.push('principle');
+  if (state.relationships.length > 0) activeSections.push('relationship');
+  if (state.acts.length > 0) activeSections.push('act');
+  if (state.entities.some(e => e.arc && e.arc.length > 0)) activeSections.push('protagonist');
+  if (state.entities.some(e => e.type === 'faction')) activeSections.push('faction');
+  if (activeSections.length > 0) {
+    const exemplar = state.entities.length > 0 ? state.entities[0] : null;
+    const primarySection = activeSections[0];
+    const addendum = buildSystemPromptAddendum(primarySection, exemplar);
+    if (addendum) {
+      ctx += "\n\n" + addendum;
+    }
+  }
+
   return ctx;
 }
 
@@ -1067,6 +1104,170 @@ function EditableText({ value, onChange, style, multiline, placeholder, isWork, 
   );
 }
 
+/**
+ * InspectorModal — full canonical editor with live display preview.
+ * Opens as an overlay when an inspector-mode field is clicked.
+ */
+function InspectorModal({ value, fieldPath, onChange, onClose }) {
+  const t = useT();
+  const [draft, setDraft] = useState(value);
+  const ref = useRef(null);
+  const hint = getFieldHint(fieldPath);
+  const preview = deriveDisplayText(fieldPath, draft);
+
+  useEffect(() => { if (ref.current) ref.current.focus(); }, []);
+
+  const handleSave = () => { if (draft !== value) onChange(draft); onClose(); };
+  const handleKeyDown = (e) => { if (e.key === "Escape") onClose(); };
+
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+      background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 999,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: t.bgPane, border: `1px solid ${t.borderBezel}`, borderRadius: "8px",
+        padding: "20px", width: "min(90vw, 560px)", maxHeight: "80vh", display: "flex", flexDirection: "column",
+        boxShadow: t.acrylicShadow,
+      }}>
+        {hint && (
+          <div style={{ marginBottom: "12px", padding: "8px 10px", background: t.bgCanvas, borderRadius: "4px", border: `1px solid ${t.borderBezel}` }}>
+            <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1px", marginBottom: "3px" }}>
+              {hint.expectedForm?.replace(/_/g, " ").toUpperCase()}
+            </div>
+            <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)", lineHeight: 1.5 }}>
+              {hint.definition}
+            </div>
+          </div>
+        )}
+        <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1px", marginBottom: "4px" }}>CANONICAL</div>
+        <textarea ref={ref} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={handleKeyDown}
+          style={{
+            fontSize: "13px", color: t.textWork, fontFamily: "var(--font-work)", lineHeight: 1.6,
+            background: t.bgInputFocus, border: `1px solid ${t.blue}`, borderRadius: "4px",
+            padding: "10px 12px", resize: "vertical", minHeight: "100px", maxHeight: "40vh",
+            outline: "none", width: "100%", boxSizing: "border-box",
+          }} />
+        {preview && (
+          <div style={{ marginTop: "12px" }}>
+            <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1px", marginBottom: "4px" }}>
+              DISPLAY PREVIEW <span style={{ fontWeight: 400, letterSpacing: 0 }}>({preview.clamp_strategy_used})</span>
+            </div>
+            <div style={{
+              fontSize: "12px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.5,
+              padding: "8px 10px", background: t.bgCanvas, borderRadius: "4px", border: `1px solid ${t.borderBezel}`,
+            }}>
+              {preview.text || <span style={{ color: t.textUiGhost, fontStyle: "italic" }}>empty</span>}
+            </div>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: "8px", marginTop: "14px", justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{
+            fontSize: "11px", padding: "6px 16px", borderRadius: "4px",
+            border: `1px solid ${t.borderBezel}`, background: "transparent", color: t.textUi,
+            cursor: "pointer", fontFamily: "var(--font-ui)",
+          }}>Cancel</button>
+          <button onClick={handleSave} style={{
+            fontSize: "11px", padding: "6px 16px", borderRadius: "4px",
+            border: `1px solid ${t.blue}`, background: t.blueTint, color: t.blue,
+            cursor: "pointer", fontFamily: "var(--font-ui)", fontWeight: 600,
+          }}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * OntologyField — routes to the appropriate editing surface based on
+ * the field's editing_mode from the constraint registry.
+ *
+ * - "inline":     EditableText (expand-on-focus canonical editor)
+ * - "inspector":  Shows clamped display text; click opens InspectorModal
+ */
+function OntologyField({ fieldPath, value, displayValue, onChange, style, isWork, placeholder, multiline }) {
+  const t = useT();
+  const mode = getEditMode(fieldPath);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+
+  if (mode === "inspector") {
+    return (
+      <>
+        <span onClick={() => setInspectorOpen(true)}
+          style={{
+            ...style, cursor: "pointer", display: "inline-block", minWidth: "40px",
+            borderBottom: `1px dashed ${t.borderBezel}`, paddingBottom: "1px",
+          }}
+          title="Click to edit in inspector">
+          {displayValue || value || <span style={{ color: t.textUiGhost, fontStyle: "italic" }}>{placeholder || "click to edit"}</span>}
+        </span>
+        {inspectorOpen && (
+          <InspectorModal value={value} fieldPath={fieldPath} onChange={onChange} onClose={() => setInspectorOpen(false)} />
+        )}
+      </>
+    );
+  }
+
+  // Default: inline editing (same as existing EditableText)
+  return (
+    <EditableText value={value} onChange={onChange} style={style} multiline={multiline} placeholder={placeholder} isWork={isWork} />
+  );
+}
+
+/**
+ * ArcEditor — structured editor for an entity's arc array.
+ * Each beat gets its own inline editing row with add/remove controls.
+ */
+function ArcEditor({ arc, acts, onChange, entityId, dispatch }) {
+  const t = useT();
+
+  const handleBeatChange = (beatIdx, field, value) => {
+    const updated = arc.map((beat, i) => i === beatIdx ? { ...beat, [field]: value } : beat);
+    onChange(updated);
+  };
+
+  const handleAddBeat = () => {
+    const usedActs = new Set(arc.map(b => b.act));
+    const nextAct = acts.find(a => !usedActs.has(a.number))?.number || (acts.length + 1);
+    onChange([...arc, { act: nextAct, state: "", movement: "" }]);
+  };
+
+  const handleRemoveBeat = (beatIdx) => {
+    onChange(arc.filter((_, i) => i !== beatIdx));
+  };
+
+  return (
+    <div>
+      {arc.map((beat, bi) => (
+        <div key={bi} style={{
+          display: "flex", gap: "6px", alignItems: "flex-start", marginBottom: "6px",
+          padding: "6px 8px", background: t.bgCanvas, borderRadius: "4px", border: `1px solid ${t.borderBezel}`,
+        }}>
+          <select value={beat.act} onChange={e => handleBeatChange(bi, 'act', parseInt(e.target.value))}
+            style={{ fontSize: "10px", fontFamily: "var(--font-ui)", background: t.bgPane, color: t.textUi, border: `1px solid ${t.borderBezel}`, borderRadius: "3px", padding: "2px 4px", width: "58px", flexShrink: 0 }}>
+            {acts.map(a => <option key={a.number} value={a.number}>Act {a.number}</option>)}
+          </select>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "3px" }}>
+            <EditableText value={beat.state} onChange={v => handleBeatChange(bi, 'state', v)}
+              style={{ fontSize: "11px", color: t.blue, fontFamily: "var(--font-ui)", fontWeight: 600 }} placeholder="State" />
+            <EditableText value={beat.movement} onChange={v => handleBeatChange(bi, 'movement', v)}
+              style={{ fontSize: "10px", color: t.textUi, fontFamily: "var(--font-work)" }} placeholder="Movement" isWork />
+          </div>
+          <span onClick={() => handleRemoveBeat(bi)}
+            style={{ fontSize: "11px", color: t.textUiGhost, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}
+            title="Remove beat">×</span>
+        </div>
+      ))}
+      <div onClick={handleAddBeat}
+        style={{ fontSize: "10px", color: t.textUiLight, fontFamily: "var(--font-ui)", cursor: "pointer", padding: "4px 8px", textAlign: "center", border: `1px dashed ${t.borderBezel}`, borderRadius: "4px", transition: "color 0.15s" }}
+        onMouseEnter={ev => ev.currentTarget.style.color = t.blue} onMouseLeave={ev => ev.currentTarget.style.color = t.textUiLight}>
+        + Add Arc Beat
+      </div>
+    </div>
+  );
+}
+
 function TensionSlider({ value, onChange }) {
   const t = useT();
   return (
@@ -1106,6 +1307,7 @@ function FilesMenu({
   onImport,
   onSave,
   onExportCurrent,
+  onExportDualTrack,
   onLoadProject,
   onExportProject,
   onClose,
@@ -1258,6 +1460,17 @@ function FilesMenu({
           cursor: "pointer",
           fontFamily: "var(--font-ui)",
         }}>Export</button>
+        <button onClick={onExportDualTrack} style={{
+          flex: 1,
+          fontSize: "11px",
+          padding: "8px 0",
+          borderRadius: "4px",
+          border: `1px solid ${t.borderBezel}`,
+          background: "transparent",
+          color: t.textUi,
+          cursor: "pointer",
+          fontFamily: "var(--font-ui)",
+        }}>Export V2</button>
       </div>
     </div>
   );
@@ -1308,13 +1521,13 @@ function ProposalCard({ proposal, onAccept, onReject }) {
       </div>
       {d.name && <div style={{ fontSize: "15px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600, marginBottom: "5px" }}>{d.name}</div>}
       {d.title && !d.name && <div style={{ fontSize: "15px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600, marginBottom: "5px" }}>{d.title}</div>}
-      {d.definition && <div style={{ fontSize: "12px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.55, marginBottom: "6px" }}>{d.definition}</div>}
-      {d.role && <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)" }}><span style={{ color: t.textUiLight }}>Role:</span> {d.role}</div>}
-      {d.psychology && <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)" }}><span style={{ color: t.textUiLight }}>Psychology:</span> {d.psychology}</div>}
-      {d.dynamic && <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)" }}><span style={{ color: t.textUiLight }}>Dynamic:</span> {d.dynamic}</div>}
-      {d.content && <div style={{ fontSize: "13px", color: t.textWork, fontFamily: "var(--font-work)", fontStyle: "italic", margin: "5px 0" }}>"{d.content}"</div>}
-      {d.question && <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)" }}><span style={{ color: t.textUiLight }}>Question:</span> {d.question}</div>}
-      {d.tone && <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)" }}><span style={{ color: t.textUiLight }}>Tone:</span> {d.tone}</div>}
+      {d.definition && <div style={{ fontSize: "12px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.55, marginBottom: "6px" }}>{deriveDisplayText('principle.definition', d.definition)?.text ?? d.definition}</div>}
+      {d.role && <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)" }}><span style={{ color: t.textUiLight }}>Role:</span> {deriveDisplayText('entity.role', d.role)?.text ?? d.role}</div>}
+      {d.psychology && <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)" }}><span style={{ color: t.textUiLight }}>Psychology:</span> {deriveDisplayText('entity.psychology', d.psychology)?.text ?? d.psychology}</div>}
+      {d.dynamic && <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)" }}><span style={{ color: t.textUiLight }}>Dynamic:</span> {deriveDisplayText('relationship.dynamic', d.dynamic)?.text ?? d.dynamic}</div>}
+      {d.content && <div style={{ fontSize: "13px", color: t.textWork, fontFamily: "var(--font-work)", fontStyle: "italic", margin: "5px 0" }}>"{deriveDisplayText('expression.content', d.content)?.text ?? d.content}"</div>}
+      {d.question && <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)" }}><span style={{ color: t.textUiLight }}>Question:</span> {deriveDisplayText('act.question', d.question)?.text ?? d.question}</div>}
+      {d.tone && <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-ui)" }}><span style={{ color: t.textUiLight }}>Tone:</span> {deriveDisplayText('act.tone', d.tone)?.text ?? d.tone}</div>}
       {d.coreStatement && <div style={{ fontSize: "12px", color: t.yellow, fontFamily: "var(--font-work)", margin: "4px 0" }}>{d.coreStatement}</div>}
       {d.tension != null && <div style={{ fontSize: "10px", color: t.tension(d.tension), fontFamily: "var(--font-ui)", fontWeight: 500 }}>Tension: {(d.tension * 100).toFixed(0)}%</div>}
       {d.servesPrinciples?.length > 0 && (
@@ -1646,7 +1859,7 @@ function ConstellationView({ state, selectedEntity, onSelectEntity, selectedPrin
 
 // ─── TENSION WEB (improved node legibility) ──────────────────────────────────
 
-function TensionWeb({ state, selectedEntity, onSelectEntity }) {
+function TensionWeb({ state, selectedEntity, onSelectEntity, getDisplay }) {
   const t = useT();
   const containerRef = useRef(null);
   const [dims, setDims] = useState({ w: 900, h: 560 });
@@ -1678,7 +1891,7 @@ function TensionWeb({ state, selectedEntity, onSelectEntity }) {
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%", background: t.bgCanvas }}>
       <svg width="100%" height="100%" viewBox={`0 0 ${dims.w} ${dims.h}`}>
-        {state.relationships.map(rel => {
+        {state.relationships.map((rel, ri) => {
           const src = layout.find(n => n.id === rel.source), tgt = layout.find(n => n.id === rel.target);
           if (!src || !tgt) return null;
           const active = selectedEntity === rel.source || selectedEntity === rel.target || hovered === rel.source || hovered === rel.target;
@@ -1690,8 +1903,8 @@ function TensionWeb({ state, selectedEntity, onSelectEntity }) {
               {active && (
                 <g style={{ pointerEvents: "none" }}>
                   <rect x={(src.x+tgt.x)/2 - 65} y={(src.y+tgt.y)/2 - 22} width="130" height="30" rx="4" fill={t.bgCanvas} fillOpacity="0.92" />
-                  <text x={(src.x+tgt.x)/2} y={(src.y+tgt.y)/2 - 7} textAnchor="middle" fill={t.textUiStrong} fontSize="11" fontFamily="var(--font-work)" fontWeight="600">{rel.type}</text>
-                  <text x={(src.x+tgt.x)/2} y={(src.y+tgt.y)/2 + 7} textAnchor="middle" fill={t.textUi} fontSize="10" fontFamily="var(--font-work)" fontStyle="italic">{rel.dynamic}</text>
+                  <text x={(src.x+tgt.x)/2} y={(src.y+tgt.y)/2 - 7} textAnchor="middle" fill={t.textUiStrong} fontSize="11" fontFamily="var(--font-work)" fontWeight="600">{getDisplay(`relationships[${ri}].type`, rel.type)}</text>
+                  <text x={(src.x+tgt.x)/2} y={(src.y+tgt.y)/2 + 7} textAnchor="middle" fill={t.textUi} fontSize="10" fontFamily="var(--font-work)" fontStyle="italic">{getDisplay(`relationships[${ri}].dynamic`, rel.dynamic)}</text>
                 </g>
               )}
             </g>
@@ -1735,7 +1948,7 @@ function TensionWeb({ state, selectedEntity, onSelectEntity }) {
 
 // ─── ARC TIMELINE ────────────────────────────────────────────────────────────
 
-function ArcTimeline({ state, selectedEntity, onSelectEntity, dispatch }) {
+function ArcTimeline({ state, selectedEntity, onSelectEntity, dispatch, getDisplay }) {
   const t = useT();
   const ent = selectedEntity ? state.entities.find(e => e.id === selectedEntity) : null;
   const displayed = ent ? [ent] : state.entities.filter(e => e.arc && e.arc.length > 0);
@@ -1746,17 +1959,19 @@ function ArcTimeline({ state, selectedEntity, onSelectEntity, dispatch }) {
     <div style={{ padding: "22px 26px", overflowY: "auto", height: "100%", background: t.bgCanvas }}>
       <div style={{ display: "flex", gap: 0, marginBottom: "22px", borderBottom: `1px solid ${t.borderBezel}`, paddingBottom: "15px" }}>
         <div style={{ width: "165px", flexShrink: 0 }} />
-        {state.acts.map(act => (
+        {state.acts.map((act, actIdx) => (
           <div key={act.number} style={{ flex: 1, padding: "7px 13px", borderLeft: `1px solid ${t.borderBezel}` }}>
             <div style={{ fontSize: "10px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "4px" }}>ACT {act.number}</div>
             <EditableText value={act.title} onChange={v => dispatch({ type: "UPDATE_ACT", number: act.number, data: { title: v } })}
               style={{ fontSize: "15px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600 }} isWork />
-            <div style={{ fontSize: "12px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.5, marginTop: "3px" }}>{act.question}</div>
-            <div style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginTop: "4px", fontStyle: "italic" }}>{act.tone}</div>
+            <div style={{ fontSize: "12px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.5, marginTop: "3px" }}>{getDisplay(`acts[${actIdx}].question`, act.question)}</div>
+            <div style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginTop: "4px", fontStyle: "italic" }}>{getDisplay(`acts[${actIdx}].tone`, act.tone)}</div>
           </div>
         ))}
       </div>
-      {displayed.map(entity => (
+      {displayed.map(entity => {
+        const ei = state.entities.indexOf(entity);
+        return (
         <div key={entity.id} style={{ marginBottom: "13px", cursor: "pointer" }} onClick={() => onSelectEntity(selectedEntity === entity.id ? null : entity.id)}>
           <div style={{ display: "flex", gap: 0 }}>
             <div style={{ width: "165px", flexShrink: 0, paddingRight: "13px", paddingTop: "4px" }}>
@@ -1764,10 +1979,11 @@ function ArcTimeline({ state, selectedEntity, onSelectEntity, dispatch }) {
                 <span style={{ color: entity.type === "location" ? t.red : t.blue, fontSize: "12px" }}>{TYPE_ICON[entity.type]}</span>
                 <span style={{ fontSize: "13px", color: selectedEntity === entity.id ? t.textUiStrong : t.textUi, fontFamily: "var(--font-work)", fontWeight: 600 }}>{entity.name}</span>
               </div>
-              <div style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginTop: "2px", marginLeft: "19px" }}>{entity.role.split("—")[0].trim()}</div>
+              <div style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginTop: "2px", marginLeft: "19px" }}>{getDisplay(`entities[${ei}].role`, entity.role).split("—")[0].trim()}</div>
             </div>
             {state.acts.map(act => {
               const ap = entity.arc?.find(a => a.act === act.number);
+              const bi = ap ? entity.arc.indexOf(ap) : -1;
               return (
                 <div key={act.number} style={{
                   flex: 1, padding: "7px 11px", minHeight: "51px", borderLeft: `1px solid ${t.borderBezel}`,
@@ -1776,8 +1992,8 @@ function ArcTimeline({ state, selectedEntity, onSelectEntity, dispatch }) {
                 }}>
                   {ap ? (
                     <>
-                      <div style={{ fontSize: "12px", color: t.blue, fontFamily: "var(--font-ui)", fontWeight: 600, marginBottom: "2px" }}>{ap.state}</div>
-                      <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.3 }}>{ap.movement}</div>
+                      <div style={{ fontSize: "12px", color: t.blue, fontFamily: "var(--font-ui)", fontWeight: 600, marginBottom: "2px" }}>{getDisplay(`entities[${ei}].arc[${bi}].state`, ap.state)}</div>
+                      <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.3 }}>{getDisplay(`entities[${ei}].arc[${bi}].movement`, ap.movement)}</div>
                     </>
                   ) : (
                     <div style={{ width: "100%", height: "1px", background: t.borderBezel, marginTop: "22px", opacity: 0.5 }} />
@@ -1787,14 +2003,15 @@ function ArcTimeline({ state, selectedEntity, onSelectEntity, dispatch }) {
             })}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 // ─── LAYER MAP ───────────────────────────────────────────────────────────────
 
-function LayerMap({ state, onSelectEntity, onSelectPrinciple, dispatch }) {
+function LayerMap({ state, onSelectEntity, onSelectPrinciple, dispatch, getDisplay }) {
   const t = useT();
   return (
     <div style={{ padding: "24px", overflowY: "auto", height: "100%", background: t.bgCanvas }}>
@@ -1806,13 +2023,13 @@ function LayerMap({ state, onSelectEntity, onSelectPrinciple, dispatch }) {
           <span style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-work)", fontStyle: "italic" }}>— survives any transposition</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-          {state.principles.map(p => {
+          {state.principles.map((p, pi) => {
             const entCount = state.entities.filter(e => e.servesPrinciples.includes(p.id)).length;
             return (
               <div key={p.id} onClick={() => onSelectPrinciple(p.id)} style={{ padding: "12px 14px", background: t.bgPane, border: `1px solid ${t.borderBezel}`, borderRadius: "4px", cursor: "pointer", transition: "all 0.15s" }}
                 onMouseEnter={ev => { ev.currentTarget.style.borderColor = t.yellow; }} onMouseLeave={ev => { ev.currentTarget.style.borderColor = t.borderBezel; }}>
                 <div style={{ fontSize: "13px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600, marginBottom: "4px" }}>{p.name}</div>
-                <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.definition}</div>
+                <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{getDisplay(`principles[${pi}].definition`, p.definition)}</div>
                 <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}><Badge color={t.yellow} small>R:{p.redundancy}</Badge><Badge color={t.blue} small>{entCount} entities</Badge></div>
               </div>
             );
@@ -1855,11 +2072,12 @@ function LayerMap({ state, onSelectEntity, onSelectPrinciple, dispatch }) {
           <span style={{ fontSize: "10px", color: t.red, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "2px" }}>EXPRESSIVE</span>
           <span style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-work)", fontStyle: "italic" }}>— requires reinvention under domain shift</span>
         </div>
-        {state.expressions.map(x => {
+        {state.expressions.map((x, xi) => {
           const pc = t[PORT_COLOR_K[x.portability]] || t.red;
+          const dispContent = getDisplay(`expressions[${xi}].content`, x.content);
           return (
           <div key={x.id} style={{ padding: "10px 12px", marginBottom: "6px", background: t.bgPane, border: `1px solid ${t.borderBezel}`, borderLeft: `3px solid ${pc}`, borderRadius: "4px" }}>
-            <div style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", fontStyle: x.type === "dialogue" ? "italic" : "normal" }}>{x.type === "dialogue" ? `"${x.content}"` : x.content}</div>
+            <div style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", fontStyle: x.type === "dialogue" ? "italic" : "normal" }}>{x.type === "dialogue" ? `"${dispContent}"` : dispContent}</div>
             <div style={{ display: "flex", gap: "6px", marginTop: "5px", alignItems: "center" }}>
               <Badge color={pc} small>{x.portability}</Badge>
               <Badge color={x.redundancy <= 1 ? t.red : t.textUiLight} small>R:{x.redundancy}{x.redundancy <= 1 ? " ⚠" : ""}</Badge>
@@ -1953,7 +2171,7 @@ function CoherenceView({ state }) {
 
 // ─── COMPENDIUM VIEW ─────────────────────────────────────────────────────────
 
-function CompendiumView({ state, dispatch, onSelectEntity }) {
+function CompendiumView({ state, dispatch, onSelectEntity, getDisplay }) {
   const t = useT();
   const [expanded, setExpanded] = useState({});
 
@@ -2041,15 +2259,12 @@ function CompendiumView({ state, dispatch, onSelectEntity }) {
                         {/* Overview */}
                         <div style={{ marginBottom: "16px" }}>
                           <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1px", marginBottom: "6px" }}>OVERVIEW</div>
-                          <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", marginBottom: "4px", fontWeight: 500 }}>{entity.role}</div>
-                          <EditableText
-                            value={entity.psychology}
+                          <div style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", marginBottom: "4px", fontWeight: 500 }}>{getDisplay(`entities[${state.entities.indexOf(entity)}].role`, entity.role)}</div>
+                          <OntologyField fieldPath="entity.psychology" value={entity.psychology}
+                            displayValue={getDisplay(`entities[${state.entities.indexOf(entity)}].psychology`, entity.psychology)}
                             onChange={v => dispatch({ type: "UPDATE_ENTITY", id: entity.id, data: { psychology: v } })}
-                            multiline
                             style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: 1.5 }}
-                            isWork
-                            placeholder="Internal logic and motivation..."
-                          />
+                            isWork multiline placeholder="Internal logic and motivation..." />
                         </div>
 
                         {/* Principles Served */}
@@ -2108,8 +2323,8 @@ function CompendiumView({ state, dispatch, onSelectEntity }) {
                                       </span>
                                       <Badge color={t.blue} small>{Math.round(rel.tension * 100)}%</Badge>
                                     </div>
-                                    <div style={{ fontSize: "10px", color: t.textUi, fontFamily: "var(--font-work)", marginBottom: "2px" }}>{rel.type}</div>
-                                    <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-work)", fontStyle: "italic" }}>{rel.dynamic}</div>
+                                    <div style={{ fontSize: "10px", color: t.textUi, fontFamily: "var(--font-work)", marginBottom: "2px" }}>{getDisplay(`relationships[${state.relationships.indexOf(rel)}].type`, rel.type)}</div>
+                                    <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-work)", fontStyle: "italic" }}>{getDisplay(`relationships[${state.relationships.indexOf(rel)}].dynamic`, rel.dynamic)}</div>
                                   </div>
                                 );
                               })}
@@ -2144,7 +2359,7 @@ function CompendiumView({ state, dispatch, onSelectEntity }) {
                                     {expr.type} {expr.act && `· Act ${expr.act}`} {expr.portability && `· ${expr.portability}`}
                                   </div>
                                   <div style={{ fontSize: "11px", color: t.textWork, fontFamily: "var(--font-work)", lineHeight: 1.4, fontStyle: "italic", marginBottom: "2px" }}>
-                                    "{expr.content}"
+                                    "{getDisplay(`expressions[${state.expressions.indexOf(expr)}].content`, expr.content)}"
                                   </div>
                                   {expr.note && (
                                     <div style={{ fontSize: "9px", color: t.textUi, fontFamily: "var(--font-work)" }}>{expr.note}</div>
@@ -2193,7 +2408,7 @@ function CompendiumView({ state, dispatch, onSelectEntity }) {
 
 // ─── INSPECTOR PANEL ─────────────────────────────────────────────────────────
 
-function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelectEntity, onSelectPrinciple }) {
+function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelectEntity, onSelectPrinciple, getDisplay }) {
   const t = useT();
   const entity = selectedEntity ? state.entities.find(e => e.id === selectedEntity) : null;
   const principle = selectedPrinciple ? state.principles.find(p => p.id === selectedPrinciple) : null;
@@ -2219,8 +2434,10 @@ function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelec
         <div style={{ fontSize: "9px", color: t.yellow, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "2px", marginBottom: "4px" }}>CONSTITUTIONAL PRINCIPLE</div>
         <EditableText value={principle.name} onChange={v => dispatch({ type: "UPDATE_PRINCIPLE", id: principle.id, data: { name: v } })}
           style={{ fontSize: "16px", color: t.textWork, fontFamily: "var(--font-work)", fontWeight: 600, display: "block", marginBottom: "10px" }} isWork />
-        <EditableText value={principle.definition} multiline onChange={v => dispatch({ type: "UPDATE_PRINCIPLE", id: principle.id, data: { definition: v } })}
-          style={{ fontSize: "12px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: "1.6", display: "block", borderLeft: `2px solid ${t.yellow}`, paddingLeft: "12px", marginBottom: "18px" }} isWork />
+        <OntologyField fieldPath="principle.definition" value={principle.definition}
+          displayValue={getDisplay(`principles[${state.principles.indexOf(principle)}].definition`, principle.definition)}
+          onChange={v => dispatch({ type: "UPDATE_PRINCIPLE", id: principle.id, data: { definition: v } })}
+          style={{ fontSize: "12px", color: t.textUi, fontFamily: "var(--font-work)", lineHeight: "1.6", display: "block", borderLeft: `2px solid ${t.yellow}`, paddingLeft: "12px", marginBottom: "18px" }} isWork multiline />
         <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
           <div style={{ padding: "10px", background: t.bgCanvas, border: `1px solid ${t.borderBezel}`, borderRadius: "4px", flex: 1, textAlign: "center" }}>
             <div style={{ fontSize: "18px", color: t.yellow, fontFamily: "var(--font-ui)", fontWeight: 700 }}>{principle.redundancy}</div>
@@ -2235,14 +2452,14 @@ function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelec
         {serving.map(e => (
           <div key={e.id} onClick={() => { onSelectEntity(e.id); onSelectPrinciple(null); }}
             style={{ fontSize: "11px", color: t.blue, fontFamily: "var(--font-ui)", marginBottom: "5px", paddingLeft: "8px", cursor: "pointer" }}>
-            {TYPE_ICON[e.type]} <span style={{ fontFamily: "var(--font-work)" }}>{e.name}</span> <span style={{ color: t.textUiLight }}>— {e.role.split("—")[0].trim()}</span>
+            {TYPE_ICON[e.type]} <span style={{ fontFamily: "var(--font-work)" }}>{e.name}</span> <span style={{ color: t.textUiLight }}>— {getDisplay(`entities[${state.entities.indexOf(e)}].role`, e.role).split("—")[0].trim()}</span>
           </div>
         ))}
         {servExp.length > 0 && (
           <>
             <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginTop: "16px", marginBottom: "6px" }}>EXPRESSED THROUGH</div>
             {servExp.map(x => (
-              <div key={x.id} style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", marginBottom: "6px", paddingLeft: "10px", fontStyle: "italic", borderLeft: `2px solid ${t.red}30` }}>"{x.content}"</div>
+              <div key={x.id} style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", marginBottom: "6px", paddingLeft: "10px", fontStyle: "italic", borderLeft: `2px solid ${t.red}30` }}>"{getDisplay(`expressions[${state.expressions.indexOf(x)}].content`, x.content)}"</div>
             ))}
           </>
         )}
@@ -2260,8 +2477,10 @@ function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelec
           style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", fontStyle: "italic" }} isWork />
       </div>
       <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "4px" }}>PSYCHOLOGY</div>
-      <EditableText value={entity.psychology} multiline onChange={v => dispatch({ type: "UPDATE_ENTITY", id: entity.id, data: { psychology: v } })}
-        style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", lineHeight: "1.6", display: "block", padding: "10px 12px", background: t.bgCanvas, border: `1px solid ${t.borderBezel}`, borderRadius: "4px", marginBottom: "18px" }} isWork />
+      <OntologyField fieldPath="entity.psychology" value={entity.psychology}
+        displayValue={getDisplay(`entities[${state.entities.indexOf(entity)}].psychology`, entity.psychology)}
+        onChange={v => dispatch({ type: "UPDATE_ENTITY", id: entity.id, data: { psychology: v } })}
+        style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", lineHeight: "1.6", display: "block", padding: "10px 12px", background: t.bgCanvas, border: `1px solid ${t.borderBezel}`, borderRadius: "4px", marginBottom: "18px" }} isWork multiline />
       <div style={{ fontSize: "9px", color: t.yellow, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "6px" }}>SERVES PRINCIPLES</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "18px" }}>
         {state.principles.map(p => {
@@ -2287,7 +2506,9 @@ function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelec
                   <EditableText value={rel.type} onChange={v => dispatch({ type: "UPDATE_RELATIONSHIP", id: rel.id, data: { type: v } })}
                     style={{ fontSize: "11px", color: t.blue, fontFamily: "var(--font-ui)" }} placeholder="relationship type" />
                 </div>
-                <EditableText value={rel.dynamic} onChange={v => dispatch({ type: "UPDATE_RELATIONSHIP", id: rel.id, data: { dynamic: v } })}
+                <OntologyField fieldPath="relationship.dynamic" value={rel.dynamic}
+                  displayValue={getDisplay(`relationships[${state.relationships.indexOf(rel)}].dynamic`, rel.dynamic)}
+                  onChange={v => dispatch({ type: "UPDATE_RELATIONSHIP", id: rel.id, data: { dynamic: v } })}
                   style={{ fontSize: "11px", color: t.textUi, fontFamily: "var(--font-work)", display: "block", marginTop: "2px" }} isWork placeholder="dynamic" />
                 <div style={{ marginTop: "6px" }}><TensionSlider value={rel.tension} onChange={v => dispatch({ type: "UPDATE_RELATIONSHIP", id: rel.id, data: { tension: v } })} /></div>
                 <EditableText value={rel.trajectory} onChange={v => dispatch({ type: "UPDATE_RELATIONSHIP", id: rel.id, data: { trajectory: v } })}
@@ -2304,7 +2525,9 @@ function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelec
             const pc = t[PORT_COLOR_K[x.portability]] || t.red;
             return (
             <div key={x.id} style={{ marginBottom: "8px", padding: "10px 12px", background: t.bgCanvas, borderRadius: "4px", border: `1px solid ${t.borderBezel}`, borderLeft: `3px solid ${pc}` }}>
-              <EditableText value={x.content} onChange={v => dispatch({ type: "UPDATE_EXPRESSION", id: x.id, data: { content: v } })}
+              <OntologyField fieldPath="expression.content" value={x.content}
+                displayValue={getDisplay(`expressions[${state.expressions.indexOf(x)}].content`, x.content)}
+                onChange={v => dispatch({ type: "UPDATE_EXPRESSION", id: x.id, data: { content: v } })}
                 style={{ fontSize: "12px", color: t.textWork, fontFamily: "var(--font-work)", fontStyle: x.type === "dialogue" ? "italic" : "normal", display: "block", marginBottom: "4px" }} isWork />
               <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                 <Badge color={pc} small>{x.portability}</Badge>
@@ -2454,6 +2677,8 @@ const VIEWS = [
 export default function Storywright() {
   const [undoState, dispatch] = useReducer(undoReducer, { past: [], present: EMPTY, future: [] });
   const state = undoState.present;
+  const displayMap = useMemo(() => deriveAllDisplayFields(state), [state]);
+  const getDisplay = useCallback((key, fallback) => displayMap.get(key)?.text ?? fallback ?? "", [displayMap]);
   const [ontologyLoading, setOntologyLoading] = useState(true);
   const [surface, setSurface] = useState("conversation");
   const [view, setView] = useState("constellation");
@@ -2555,9 +2780,17 @@ export default function Storywright() {
   }, []);
 
   const handleExport = useCallback(() => {
-    const filename = state.meta.title?.trim() || "storywright";
+    const filename = state.meta.title?.trim() || “storywright”;
     exportOntology(state, filename);
     setFilesStatus(`Exported “${filename}”`);
+    setFilesWarnings([]);
+  }, [state, exportOntology]);
+
+  const handleExportDualTrack = useCallback(() => {
+    const filename = state.meta.title?.trim() || “storywright”;
+    const dualTrack = exportWithDualTrack(state);
+    exportOntology(dualTrack, `${filename}-v2`);
+    setFilesStatus(`Exported dual-track “${filename}-v2”`);
     setFilesWarnings([]);
   }, [state, exportOntology]);
 
@@ -2742,6 +2975,7 @@ export default function Storywright() {
           onImport={handleImport}
           onSave={handleSaveProjectSnapshot}
           onExportCurrent={handleExport}
+          onExportDualTrack={handleExportDualTrack}
           onLoadProject={handleLoadProject}
           onExportProject={handleExportProject}
           onClose={() => setFilesMenuOpen(false)}
@@ -2775,12 +3009,16 @@ export default function Storywright() {
               </div>
               <div>
                 <div style={{ fontSize: "9px", color: theme.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "3px" }}>CORE STATEMENT</div>
-                <EditableText value={state.meta.coreStatement} onChange={v => dispatch({ type: "UPDATE_META", data: { coreStatement: v } })}
+                <OntologyField fieldPath="meta.coreStatement" value={state.meta.coreStatement}
+                  displayValue={getDisplay('meta.coreStatement', state.meta.coreStatement)}
+                  onChange={v => dispatch({ type: "UPDATE_META", data: { coreStatement: v } })}
                   style={{ fontSize: "12px", color: theme.textWork, fontFamily: "var(--font-work)" }} isWork placeholder="What this story argues" />
               </div>
               <div>
                 <div style={{ fontSize: "9px", color: theme.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "3px" }}>NARRATIVE ARGUMENT</div>
-                <EditableText value={state.meta.narrativeArgument} onChange={v => dispatch({ type: "UPDATE_META", data: { narrativeArgument: v } })}
+                <OntologyField fieldPath="meta.narrativeArgument" value={state.meta.narrativeArgument}
+                  displayValue={getDisplay('meta.narrativeArgument', state.meta.narrativeArgument)}
+                  onChange={v => dispatch({ type: "UPDATE_META", data: { narrativeArgument: v } })}
                   style={{ fontSize: "12px", color: theme.textUi, fontFamily: "var(--font-work)" }} isWork placeholder="The argument in fuller form" />
               </div>
             </div>
@@ -2814,11 +3052,11 @@ export default function Storywright() {
           <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
             {surface === "conversation" && <ConversationPane state={state} dispatch={dispatch} messages={messages} setMessages={setMessages} apiKey={apiKey} />}
             {surface === "workbench" && view === "constellation" && <ConstellationView state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} selectedPrinciple={selectedPrinciple} onSelectPrinciple={handleSelectPrinciple} />}
-            {surface === "workbench" && view === "tension" && <TensionWeb state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} />}
-            {surface === "workbench" && view === "arc" && <ArcTimeline state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} dispatch={dispatch} />}
-            {surface === "workbench" && view === "layers" && <LayerMap state={state} onSelectEntity={handleSelectEntity} onSelectPrinciple={handleSelectPrinciple} dispatch={dispatch} />}
+            {surface === "workbench" && view === "tension" && <TensionWeb state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} getDisplay={getDisplay} />}
+            {surface === "workbench" && view === "arc" && <ArcTimeline state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} dispatch={dispatch} getDisplay={getDisplay} />}
+            {surface === "workbench" && view === "layers" && <LayerMap state={state} onSelectEntity={handleSelectEntity} onSelectPrinciple={handleSelectPrinciple} dispatch={dispatch} getDisplay={getDisplay} />}
             {surface === "workbench" && view === "coherence" && <CoherenceView state={state} />}
-            {surface === "workbench" && view === "compendium" && <CompendiumView state={state} dispatch={dispatch} onSelectEntity={handleSelectEntity} />}
+            {surface === "workbench" && view === "compendium" && <CompendiumView state={state} dispatch={dispatch} onSelectEntity={handleSelectEntity} getDisplay={getDisplay} />}
           </div>
 
           {/* INSPECTOR — permanent element: opaque, 1px border */}
@@ -2828,7 +3066,7 @@ export default function Storywright() {
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>
               <Inspector state={state} selectedEntity={selectedEntity} selectedPrinciple={selectedPrinciple}
-                dispatch={dispatch} onSelectEntity={handleSelectEntity} onSelectPrinciple={handleSelectPrinciple} />
+                dispatch={dispatch} onSelectEntity={handleSelectEntity} onSelectPrinciple={handleSelectPrinciple} getDisplay={getDisplay} />
             </div>
           </div>
         </div>
