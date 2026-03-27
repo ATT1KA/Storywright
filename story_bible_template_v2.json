@@ -21,7 +21,12 @@
       { "id": "arc.beat.detail", "maxChars": 65, "maxLines": 2, "guideline": "Body copy inside beat cell." },
       { "id": "relationship.type", "maxChars": 22, "maxLines": 1, "guideline": "Label in relationship cards/popovers." },
       { "id": "relationship.dynamic", "maxChars": 45, "maxLines": 2, "guideline": "Italic dynamic description." },
-      { "id": "expression.content", "maxChars": 280, "maxLines": 4, "guideline": "Dialogue or expression snippet." }
+      { "id": "expression.content", "maxChars": 280, "maxLines": 4, "guideline": "Dialogue or expression snippet." },
+      { "id": "cosmology.mechanism", "maxChars": 300, "maxLines": 4, "guideline": "Technical-cosmological field. Precise, not purple." },
+      { "id": "variable.origin", "maxChars": 360, "maxLines": 5, "guideline": "Variable childhood/crossing fields. Intimate, specific register." },
+      { "id": "dissolution.rule", "maxChars": 200, "maxLines": 3, "guideline": "Ending cosmological logic. Maximum precision, minimum ambiguity." },
+      { "id": "critic.philosophy", "maxChars": 360, "maxLines": 4, "guideline": "Critic framework. Rigorous enough to be compelling; structurally subordinate to meta_thesis." },
+      { "id": "meta_fictional.rule", "maxChars": 200, "maxLines": 3, "guideline": "Player-reality boundary rules. Constitutional authority." }
     ]
   },
 

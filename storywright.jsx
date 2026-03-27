@@ -260,6 +260,60 @@ const EMPTY = {
 
 const DEFAULT_ONTOLOGY_PATH = "/data/ontologies/morrow-doctrine.json";
 
+/** Extract canonical string from a dual-track field object, or pass strings through. */
+function unwrapCanonical(value) {
+  if (value == null) return value;
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value.canonical !== undefined) return String(value.canonical);
+  return String(value);
+}
+
+/** Unwrap an ontology_payload whose text fields are dual-track objects into plain-string ontology state. */
+function unwrapOntologyPayload(payload) {
+  const uc = unwrapCanonical;
+  return {
+    meta: {
+      title: uc(payload.meta?.title) ?? "",
+      subtitle: uc(payload.meta?.subtitle) ?? "",
+      coreStatement: uc(payload.meta?.coreStatement ?? payload.meta?.core_statement) ?? "",
+      narrativeArgument: uc(payload.meta?.narrativeArgument ?? payload.meta?.narrative_argument) ?? "",
+    },
+    principles: (payload.principles || []).map(p => ({
+      ...p,
+      name: uc(p.name) ?? "",
+      definition: uc(p.definition) ?? "",
+    })),
+    entities: (payload.entities || []).map(e => ({
+      ...e,
+      name: uc(e.name) ?? "",
+      role: uc(e.role) ?? "",
+      psychology: uc(e.psychology) ?? "",
+      arc: (e.arc || []).map(beat => ({
+        ...beat,
+        act: typeof beat.act === "number" ? beat.act : parseInt(beat.act) || 0,
+        state: uc(beat.state) ?? "",
+        movement: uc(beat.movement) ?? "",
+      })),
+    })),
+    acts: (payload.acts || []).map(a => ({
+      ...a,
+      number: typeof a.number === "number" ? a.number : parseInt(a.number) || 0,
+      title: uc(a.title) ?? "",
+      question: uc(a.question) ?? "",
+      tone: uc(a.tone) ?? "",
+    })),
+    relationships: (payload.relationships || []).map(r => ({
+      ...r,
+      type: uc(r.type) ?? "",
+      dynamic: uc(r.dynamic) ?? "",
+    })),
+    expressions: (payload.expressions || []).map(x => ({
+      ...x,
+      content: uc(x.content) ?? "",
+    })),
+  };
+}
+
 /** Parse and validate JSON into ontology state. */
 function parseAndValidateOntology(data, opts = {}) {
   if (!data || typeof data !== "object") {
@@ -270,6 +324,19 @@ function parseAndValidateOntology(data, opts = {}) {
     const validation = runFullValidation(data);
     return {
       state: data,
+      warnings: validation.warnings.map(w => `[${w.code}] ${w.field_path || w.scope}: ${w.message}`),
+      errors: validation.errors.map(e => `[${e.code}] ${e.field_path || e.scope}: ${e.message}`),
+    };
+  }
+
+  // Dual-track bible with ontology_payload: unwrap and use directly
+  if (data.ontology_payload &&
+      Array.isArray(data.ontology_payload.entities) &&
+      Array.isArray(data.ontology_payload.principles)) {
+    const state = unwrapOntologyPayload(data.ontology_payload);
+    const validation = runFullValidation(state);
+    return {
+      state,
       warnings: validation.warnings.map(w => `[${w.code}] ${w.field_path || w.scope}: ${w.message}`),
       errors: validation.errors.map(e => `[${e.code}] ${e.field_path || e.scope}: ${e.message}`),
     };
@@ -508,17 +575,17 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
   const worldBuilding = storyBible.world_building || {};
 
   const meta = {
-    title: storyBible.meta?.title || "",
-    subtitle: storyBible.meta?.subtitle || "",
-    coreStatement: getKey(metaThesis, "core_statement", "coreStatement") || "",
-    narrativeArgument: getKey(metaThesis, "narrative_argument", "narrativeArgument") || "",
+    title: unwrapCanonical(storyBible.meta?.title) || "",
+    subtitle: unwrapCanonical(storyBible.meta?.subtitle) || "",
+    coreStatement: unwrapCanonical(getKey(metaThesis, "core_statement", "coreStatement")) || "",
+    narrativeArgument: unwrapCanonical(getKey(metaThesis, "narrative_argument", "narrativeArgument")) || "",
   };
 
   const primaryThemes = getKey(thematicEngine, "primary_themes", "primaryThemes") || [];
   const principles = primaryThemes.map((theme, idx) => ({
     id: `p${idx + 1}`,
-    name: getKey(theme, "theme", "name") || `Principle ${idx + 1}`,
-    definition: getKey(theme, "definition", "statement") || "",
+    name: unwrapCanonical(getKey(theme, "theme", "name")) || `Principle ${idx + 1}`,
+    definition: unwrapCanonical(getKey(theme, "definition", "statement")) || "",
     portability: getKey(theme, "portability", "scope") || "universal",
     redundancy: Number(getKey(theme, "redundancy")) || 1,
   }));
@@ -542,10 +609,10 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
   const actsFromStruct = Array.isArray(getKey(narrStruct, "acts", "acts")) ? getKey(narrStruct, "acts", "acts") : [];
   const acts = actsFromStruct.map((act, idx) => ({
     number: actFromValue(getKey(act, "act_number", "actNumber", "number")) ?? (idx + 1),
-    title: getKey(act, "title", "name") || "",
-    episodes: getKey(act, "episodes", "episode_range", "episodeRange") || "",
-    tone: getKey(act, "tone") || "",
-    question: getKey(act, "central_question", "centralQuestion", "question") || "",
+    title: unwrapCanonical(getKey(act, "title", "name")) || "",
+    episodes: unwrapCanonical(getKey(act, "episodes", "episode_range", "episodeRange")) || "",
+    tone: unwrapCanonical(getKey(act, "tone")) || "",
+    question: unwrapCanonical(getKey(act, "central_question", "centralQuestion", "question")) || "",
   }));
   const orderedActNumbers = acts.map(a => a.number).sort((a, b) => a - b);
   const positionalAct = (index, total) => {
@@ -563,8 +630,8 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
       const total = entries.length;
       if (item && typeof item === "object") {
         const explicitAct = actFromValue(getKey(item, "act", "act_number", "actNumber", "number"));
-        const movement = getKey(item, "movement", "title", "key_dynamic", "keyDynamic") || "";
-        const rawState = getKey(item, "state", "scene", "description", "event", "text") || "";
+        const movement = unwrapCanonical(getKey(item, "movement", "title", "key_dynamic", "keyDynamic")) || "";
+        const rawState = unwrapCanonical(getKey(item, "state", "scene", "description", "event", "text")) || "";
         const split = splitStateMovement(rawState);
         return {
           act: explicitAct ?? positionalAct(idx, total),
@@ -626,15 +693,15 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
     return [];
   };
 
-  const protagonistName = getKey(protArch, "name", "protagonist_name", "protagonistName") || "";
+  const protagonistName = unwrapCanonical(getKey(protArch, "name", "protagonist_name", "protagonistName")) || "";
   const coreCast = getKey(charDefs, "core_cast", "coreCast") || [];
-  const castHasProtagonist = coreCast.some(c => normalizeName(getKey(c, "name")) === normalizeName(protagonistName));
+  const castHasProtagonist = coreCast.some(c => normalizeName(unwrapCanonical(getKey(c, "name"))) === normalizeName(protagonistName));
   const castWithProtagonist = (!castHasProtagonist && protagonistName)
     ? [{
         name: protagonistName,
         function_in_narrative: "Protagonist",
-        role: getKey(protArch, "archetype", "title") || "Protagonist",
-        psychology: getKey(getKey(protArch, "psychology"), "core_trait", "coreTrait") || "",
+        role: unwrapCanonical(getKey(protArch, "archetype", "title")) || "Protagonist",
+        psychology: unwrapCanonical(getKey(getKey(protArch, "psychology"), "core_trait", "coreTrait")) || "",
         serves_principles: getKey(protArch, "serves_principles", "servesPrinciples", "themes", "principles") || [],
       }, ...coreCast]
     : coreCast;
@@ -642,7 +709,7 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
 
   const characterEntities = castWithProtagonist.map((char, idx) => {
     const entityId = `e${idx + 1}`;
-    const name = String(getKey(char, "name") || `Character ${idx + 1}`);
+    const name = String(unwrapCanonical(getKey(char, "name")) || `Character ${idx + 1}`);
     const isProtagonist = protagonistName && normalizeName(name) === normalizeName(protagonistName);
 
     const rawArc = isProtagonist
@@ -667,9 +734,9 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
       id: entityId,
       name,
       type: "character",
-      layer: getKey(char, "layer") || "institutional",
-      role: getKey(char, "function_in_narrative", "functionInNarrative", "role") || "",
-      psychology: getKey(char, "psychology", "character") || "",
+      layer: unwrapCanonical(getKey(char, "layer")) || "institutional",
+      role: unwrapCanonical(getKey(char, "function_in_narrative", "functionInNarrative", "role")) || "",
+      psychology: unwrapCanonical(getKey(char, "psychology", "character")) || "",
       servesPrinciples: resolvePrincipleIds(getKey(char, "serves_principles", "servesPrinciples", "themes", "principles")),
       arc,
       shadow,
@@ -691,11 +758,11 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
 
   const factionEntities = factionsToConvert.map((faction, idx) => ({
     id: `e${characterEntities.length + idx + 1}`,
-    name: String(getKey(faction, "name") || `Faction ${idx + 1}`),
+    name: String(unwrapCanonical(getKey(faction, "name")) || `Faction ${idx + 1}`),
     type: "faction",
-    layer: getKey(faction, "layer") || "institutional",
-    role: getKey(faction, "structural_role", "structuralRole", "archetype", "role") || "",
-    psychology: getKey(faction, "character", "psychology") || "",
+    layer: unwrapCanonical(getKey(faction, "layer")) || "institutional",
+    role: unwrapCanonical(getKey(faction, "structural_role", "structuralRole", "archetype", "role")) || "",
+    psychology: unwrapCanonical(getKey(faction, "character", "psychology")) || "",
     servesPrinciples: resolvePrincipleIds(getKey(faction, "serves_principles", "servesPrinciples", "themes", "principles")),
     arc: normalizeArcForTimeline(Array.isArray(faction.arc)
       ? parseArcFromItems(faction.arc)
@@ -711,14 +778,14 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
     const geography = getKey(worldBuilding, "geography") || {};
     Object.entries(geography).forEach(([key, location], idx) => {
       const loc = (location && typeof location === "object") ? location : {};
-      const name = getKey(loc, "name") || humanizeKey(key);
+      const name = unwrapCanonical(getKey(loc, "name")) || humanizeKey(key);
       locationEntities.push({
         id: `e${characterEntities.length + factionEntities.length + idx + 1}`,
         name,
         type: "location",
-        layer: getKey(loc, "layer") || "institutional",
-        role: getKey(loc, "narrative_function", "narrativeFunction", "role") || (typeof location === "string" ? location : ""),
-        psychology: getKey(loc, "description") || "",
+        layer: unwrapCanonical(getKey(loc, "layer")) || "institutional",
+        role: unwrapCanonical(getKey(loc, "narrative_function", "narrativeFunction", "role")) || (typeof location === "string" ? location : ""),
+        psychology: unwrapCanonical(getKey(loc, "description")) || "",
         servesPrinciples: resolvePrincipleIds(getKey(loc, "serves_principles", "servesPrinciples", "themes", "principles")),
         arc: parseArcFromItems(getKey(loc, "arc", "key_scenes", "keyScenes")),
         shadow: null,
@@ -733,11 +800,11 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
       const inst = (instrument && typeof instrument === "object") ? instrument : {};
       instrumentEntities.push({
         id: `e${characterEntities.length + factionEntities.length + locationEntities.length + idx + 1}`,
-        name: getKey(inst, "name") || key.replace(/_/g, " "),
+        name: unwrapCanonical(getKey(inst, "name")) || key.replace(/_/g, " "),
         type: "instrument",
-        layer: getKey(inst, "layer") || "institutional",
-        role: getKey(inst, "narrative_function", "narrativeFunction", "critical_function", "criticalFunction") || "",
-        psychology: getKey(inst, "description") || "",
+        layer: unwrapCanonical(getKey(inst, "layer")) || "institutional",
+        role: unwrapCanonical(getKey(inst, "narrative_function", "narrativeFunction", "critical_function", "criticalFunction")) || "",
+        psychology: unwrapCanonical(getKey(inst, "description")) || "",
         servesPrinciples: resolvePrincipleIds(getKey(inst, "serves_principles", "servesPrinciples", "themes", "principles")),
         arc: parseArcFromItems(getKey(inst, "arc", "key_scenes", "keyScenes")),
         shadow: null,
@@ -788,8 +855,8 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
 
   const relationships = toArray(getKey(storyBible.relationship_matrix, "relationships", "edges"))
     .map((rel, idx) => {
-      let sourceName = getKey(rel, "source", "source_character", "sourceCharacter");
-      let targetName = getKey(rel, "target", "target_character", "targetCharacter");
+      let sourceName = unwrapCanonical(getKey(rel, "source", "source_character", "sourceCharacter"));
+      let targetName = unwrapCanonical(getKey(rel, "target", "target_character", "targetCharacter"));
       if ((!sourceName || !targetName) && rel?.pair) {
         const pairMatch = String(rel.pair).match(/(.+?)\s*[↔—-]\s*(.+)/);
         if (pairMatch) {
@@ -809,10 +876,10 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
         id: `r${idx + 1}`,
         source,
         target,
-        type: getKey(rel, "type", "relationship_type", "relationshipType") || "",
-        dynamic: getKey(rel, "dynamic", "description") || "",
+        type: unwrapCanonical(getKey(rel, "type", "relationship_type", "relationshipType")) || "",
+        dynamic: unwrapCanonical(getKey(rel, "dynamic", "description")) || "",
         tension,
-        trajectory: getKey(rel, "trajectory") || "",
+        trajectory: unwrapCanonical(getKey(rel, "trajectory")) || "",
       };
     })
     .filter(Boolean);
@@ -822,10 +889,10 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
   const pushExpression = (raw, defaults = {}) => {
     if (expressions.length >= MAX_EXPRESSIONS) return;
     const asObj = (raw && typeof raw === "object") ? raw : {};
-    const content = getKey(asObj, "content", "line", "text", "description", "phrase") || (typeof raw === "string" ? raw : "");
+    const content = unwrapCanonical(getKey(asObj, "content", "line", "text", "description", "phrase")) || (typeof raw === "string" ? raw : "");
     if (!String(content || "").trim()) return;
     const act = actFromValue(getKey(asObj, "act", "act_number", "actNumber"));
-    const characterRef = getKey(asObj, "character", "speaker", "entity", "entity_name", "entityName") || defaults.characterName || protagonistName;
+    const characterRef = unwrapCanonical(getKey(asObj, "character", "speaker", "entity", "entity_name", "entityName")) || defaults.characterName || protagonistName;
     const character = entityIdByName.get(normalizeName(characterRef)) || "";
     expressions.push({
       id: `x${expressions.length + 1}`,

@@ -74,6 +74,35 @@ if (template && registry) {
 const contentFlag = process.argv.includes('--content');
 const contentFile = process.argv.find((arg, i) => process.argv[i - 1] === '--file');
 
+/** Extract canonical string from a dual-track field object, or pass strings through. */
+function unwrapCanonical(value) {
+  if (value == null) return value;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value.canonical !== undefined) return String(value.canonical);
+  return String(value);
+}
+
+/** Unwrap an ontology_payload whose text fields are dual-track objects into plain-string ontology state. */
+function unwrapOntologyPayload(payload) {
+  const uc = unwrapCanonical;
+  return {
+    meta: {
+      title: uc(payload.meta?.title) ?? '',
+      subtitle: uc(payload.meta?.subtitle) ?? '',
+      coreStatement: uc(payload.meta?.coreStatement ?? payload.meta?.core_statement) ?? '',
+      narrativeArgument: uc(payload.meta?.narrativeArgument ?? payload.meta?.narrative_argument) ?? '',
+    },
+    principles: (payload.principles || []).map(p => ({ ...p, name: uc(p.name) ?? '', definition: uc(p.definition) ?? '' })),
+    entities: (payload.entities || []).map(e => ({
+      ...e, name: uc(e.name) ?? '', role: uc(e.role) ?? '', psychology: uc(e.psychology) ?? '',
+      arc: (e.arc || []).map(beat => ({ ...beat, state: uc(beat.state) ?? '', movement: uc(beat.movement) ?? '' })),
+    })),
+    acts: (payload.acts || []).map(a => ({ ...a, title: uc(a.title) ?? '', question: uc(a.question) ?? '', tone: uc(a.tone) ?? '' })),
+    relationships: (payload.relationships || []).map(r => ({ ...r, type: uc(r.type) ?? '', dynamic: uc(r.dynamic) ?? '' })),
+    expressions: (payload.expressions || []).map(x => ({ ...x, content: uc(x.content) ?? '' })),
+  };
+}
+
 if (contentFlag) {
   const targetPath = contentFile
     ? path.resolve(root, contentFile)
@@ -81,14 +110,19 @@ if (contentFlag) {
 
   const data = loadJson(targetPath, 'content-target');
   if (data) {
-    // Detect format: Storywright ontology (has entities array) or Story Bible
+    // Detect format: ontology_payload (dual-track bible), Storywright ontology, or Story Bible
+    const hasOntologyPayload = data.ontology_payload &&
+      Array.isArray(data.ontology_payload.entities) &&
+      Array.isArray(data.ontology_payload.principles);
     const isOntology = Array.isArray(data.entities) && Array.isArray(data.principles);
     let state = null;
 
-    if (isOntology) {
+    if (hasOntologyPayload) {
+      console.log('Note: Detected ontology_payload section. Unwrapping dual-track fields.');
+      state = unwrapOntologyPayload(data.ontology_payload);
+    } else if (isOntology) {
       state = data;
     } else {
-      // Minimal conversion for validation: extract what we can
       console.log('Note: File is not in Storywright ontology format. Running basic validation.');
       state = data;
     }
