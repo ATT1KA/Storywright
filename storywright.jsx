@@ -1144,7 +1144,8 @@ function proposalToActions(proposal, state) {
 
 // ─── UTILITY COMPONENTS (theme-aware via useT) ──────────────────────────────
 
-function EditableText({ value, onChange, style, multiline, placeholder, isWork, onClick }) {
+function EditableText({ value: rawValue, onChange, style, multiline, placeholder, isWork, onClick }) {
+  const value = (rawValue && typeof rawValue === "object" && rawValue.canonical !== undefined) ? String(rawValue.canonical) : (rawValue ?? "");
   const t = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -1175,7 +1176,8 @@ function EditableText({ value, onChange, style, multiline, placeholder, isWork, 
  * InspectorModal — full canonical editor with live display preview.
  * Opens as an overlay when an inspector-mode field is clicked.
  */
-function InspectorModal({ value, fieldPath, onChange, onClose }) {
+function InspectorModal({ value: rawValue, fieldPath, onChange, onClose }) {
+  const value = (rawValue && typeof rawValue === "object" && rawValue.canonical !== undefined) ? String(rawValue.canonical) : (rawValue ?? "");
   const t = useT();
   const [draft, setDraft] = useState(value);
   const ref = useRef(null);
@@ -1253,7 +1255,9 @@ function InspectorModal({ value, fieldPath, onChange, onClose }) {
  * - "inline":     EditableText (expand-on-focus canonical editor)
  * - "inspector":  Shows clamped display text; click opens InspectorModal
  */
-function OntologyField({ fieldPath, value, displayValue, onChange, style, isWork, placeholder, multiline }) {
+function OntologyField({ fieldPath, value: rawValue, displayValue: rawDisplay, onChange, style, isWork, placeholder, multiline }) {
+  const value = (rawValue && typeof rawValue === "object" && rawValue.canonical !== undefined) ? String(rawValue.canonical) : (rawValue ?? "");
+  const displayValue = (rawDisplay && typeof rawDisplay === "object" && rawDisplay.canonical !== undefined) ? String(rawDisplay.canonical) : rawDisplay;
   const t = useT();
   const mode = getEditMode(fieldPath);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -2046,7 +2050,7 @@ function ArcTimeline({ state, selectedEntity, onSelectEntity, dispatch, getDispl
                 <span style={{ color: entity.type === "location" ? t.red : t.blue, fontSize: "12px" }}>{TYPE_ICON[entity.type]}</span>
                 <span style={{ fontSize: "13px", color: selectedEntity === entity.id ? t.textUiStrong : t.textUi, fontFamily: "var(--font-work)", fontWeight: 600 }}>{entity.name}</span>
               </div>
-              <div style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginTop: "2px", marginLeft: "19px" }}>{getDisplay(`entities[${ei}].role`, entity.role).split("—")[0].trim()}</div>
+              <div style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginTop: "2px", marginLeft: "19px" }}>{String(getDisplay(`entities[${ei}].role`, entity.role) || "").split("—")[0].trim()}</div>
             </div>
             {state.acts.map(act => {
               const ap = entity.arc?.find(a => a.act === act.number);
@@ -2519,7 +2523,7 @@ function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelec
         {serving.map(e => (
           <div key={e.id} onClick={() => { onSelectEntity(e.id); onSelectPrinciple(null); }}
             style={{ fontSize: "11px", color: t.blue, fontFamily: "var(--font-ui)", marginBottom: "5px", paddingLeft: "8px", cursor: "pointer" }}>
-            {TYPE_ICON[e.type]} <span style={{ fontFamily: "var(--font-work)" }}>{e.name}</span> <span style={{ color: t.textUiLight }}>— {getDisplay(`entities[${state.entities.indexOf(e)}].role`, e.role).split("—")[0].trim()}</span>
+            {TYPE_ICON[e.type]} <span style={{ fontFamily: "var(--font-work)" }}>{e.name}</span> <span style={{ color: t.textUiLight }}>— {String(getDisplay(`entities[${state.entities.indexOf(e)}].role`, e.role) || "").split("—")[0].trim()}</span>
           </div>
         ))}
         {servExp.length > 0 && (
