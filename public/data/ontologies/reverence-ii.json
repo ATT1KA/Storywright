@@ -1771,7 +1771,7 @@
           "contract": null
         },
         "role": {
-          "canonical": "Primary protagonist. Rescued experimental subject from the higher reality. The party's adapter, infiltrator, and genre-rider.",
+          "canonical": "Protagonist — rescued experimental subject, adapter-infiltrator, genre-rider",
           "display": {
             "constraint": "entity.role",
             "text": "Protagonist / Adapter-Mage",
@@ -1912,7 +1912,7 @@
           "contract": null
         },
         "role": {
-          "canonical": "Co-protagonist. Intelligence operative. The party's sensor and psychic weapon.",
+          "canonical": "Co-protagonist — intelligence operative, sensor-psychic",
           "display": {
             "constraint": "entity.role",
             "text": "Co-protagonist / Sensor-Psychic",
@@ -2035,7 +2035,7 @@
           "contract": null
         },
         "role": {
-          "canonical": "Co-protagonist. Field operative. The party's anchor and kinetic force.",
+          "canonical": "Co-protagonist — field operative, anchor-warrior, kinetic force",
           "display": {
             "constraint": "entity.role",
             "text": "Co-protagonist / Anchor-Warrior",
@@ -2157,7 +2157,7 @@
           "contract": null
         },
         "role": {
-          "canonical": "Primary antagonist. Architect of the cult's dissolution project. Deconstructionist philosopher.",
+          "canonical": "Primary antagonist — cult dissolution architect, deconstructionist philosopher",
           "display": {
             "constraint": "entity.role",
             "text": "Antagonist / Cult architect",
@@ -2227,7 +2227,7 @@
           "contract": null
         },
         "role": {
-          "canonical": "The Critic's second-in-command. The woman who lured the Variable. The performed mother.",
+          "canonical": "Cult operative — the Critic's second, the lure, the performed mother",
           "display": {
             "constraint": "entity.role",
             "text": "Cult operative / The lure",
@@ -2295,7 +2295,7 @@
           "contract": null
         },
         "role": {
-          "canonical": "Deceased party member. Permanent structural wound. Posthumous standard for the Variable.",
+          "canonical": "Deceased party member — permanent structural wound, posthumous standard",
           "display": {
             "constraint": "entity.role",
             "text": "Deceased / Absent center",
@@ -2366,7 +2366,7 @@
           "contract": null
         },
         "role": {
-          "canonical": "Inner Circle military commander. The deep state at war.",
+          "canonical": "Inner Circle military commander — the deep state at war",
           "display": {
             "constraint": "entity.role",
             "text": "Inner Circle commander",
@@ -2436,7 +2436,7 @@
           "contract": null
         },
         "role": {
-          "canonical": "Acting Agency head. The inverted conscience — institutional fury made operational.",
+          "canonical": "Acting Agency head — inverted conscience, institutional fury made operational",
           "display": {
             "constraint": "entity.role",
             "text": "Agency head / War coordinator",
@@ -2490,7 +2490,7 @@
           "contract": "arc.act"
         },
         "question": {
-          "canonical": "Who was this child, what did she need, and how did the need become the door?",
+          "canonical": "Who was this child, what did she need so desperately, and how did that need become the door?",
           "display": {
             "constraint": "act.question",
             "text": "Who was this child and how did her need become the door?",
@@ -2640,7 +2640,7 @@
           "contract": "arc.act"
         },
         "question": {
-          "canonical": "What remains when the fantasy is over?",
+          "canonical": "What remains when the fantasy is over — when the construction is acknowledged and the genre dissolved?",
           "display": {
             "constraint": "act.question",
             "text": "What remains when the fantasy is over?",
