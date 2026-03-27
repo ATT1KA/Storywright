@@ -848,7 +848,7 @@ function convertStoryBibleToOntology(storyBible, opts = {}) {
     const protagonistId = entities.find(e => normalizeName(e.name) === normalizeName(protagonistName))?.id;
     if (protagonistId) {
       entityIdByName.set("morrow", protagonistId);
-      const lastName = protagonistName.split(/\s+/).slice(-1)[0];
+      const lastName = String(protagonistName || "").split(/\s+/).slice(-1)[0];
       if (lastName) entityIdByName.set(normalizeName(lastName), protagonistId);
     }
   }
