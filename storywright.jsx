@@ -288,6 +288,9 @@ function unwrapOntologyPayload(payload) {
       name: uc(e.name) ?? "",
       role: uc(e.role) ?? "",
       psychology: uc(e.psychology) ?? "",
+      layer: e.layer ?? "institutional",
+      servesPrinciples: e.servesPrinciples ?? [],
+      shadow: e.shadow ?? null,
       arc: (e.arc || []).map(beat => ({
         ...beat,
         act: typeof beat.act === "number" ? beat.act : parseInt(beat.act) || 0,
@@ -299,6 +302,7 @@ function unwrapOntologyPayload(payload) {
       ...a,
       number: typeof a.number === "number" ? a.number : parseInt(a.number) || 0,
       title: uc(a.title) ?? "",
+      episodes: a.episodes ?? "",
       question: uc(a.question) ?? "",
       tone: uc(a.tone) ?? "",
     })),
@@ -306,10 +310,18 @@ function unwrapOntologyPayload(payload) {
       ...r,
       type: uc(r.type) ?? "",
       dynamic: uc(r.dynamic) ?? "",
+      trajectory: uc(r.trajectory) ?? "",
     })),
     expressions: (payload.expressions || []).map(x => ({
       ...x,
       content: uc(x.content) ?? "",
+      character: x.character ?? "",
+      act: x.act ?? null,
+      servesPrinciples: x.servesPrinciples ?? [],
+      servesEntity: x.servesEntity ?? "",
+      portability: x.portability ?? "linguistic",
+      redundancy: x.redundancy ?? 1,
+      note: x.note ?? "",
     })),
   };
 }

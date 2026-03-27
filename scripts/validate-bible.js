@@ -95,11 +95,16 @@ function unwrapOntologyPayload(payload) {
     principles: (payload.principles || []).map(p => ({ ...p, name: uc(p.name) ?? '', definition: uc(p.definition) ?? '' })),
     entities: (payload.entities || []).map(e => ({
       ...e, name: uc(e.name) ?? '', role: uc(e.role) ?? '', psychology: uc(e.psychology) ?? '',
+      layer: e.layer ?? 'institutional', servesPrinciples: e.servesPrinciples ?? [], shadow: e.shadow ?? null,
       arc: (e.arc || []).map(beat => ({ ...beat, state: uc(beat.state) ?? '', movement: uc(beat.movement) ?? '' })),
     })),
-    acts: (payload.acts || []).map(a => ({ ...a, title: uc(a.title) ?? '', question: uc(a.question) ?? '', tone: uc(a.tone) ?? '' })),
-    relationships: (payload.relationships || []).map(r => ({ ...r, type: uc(r.type) ?? '', dynamic: uc(r.dynamic) ?? '' })),
-    expressions: (payload.expressions || []).map(x => ({ ...x, content: uc(x.content) ?? '' })),
+    acts: (payload.acts || []).map(a => ({ ...a, title: uc(a.title) ?? '', episodes: a.episodes ?? '', question: uc(a.question) ?? '', tone: uc(a.tone) ?? '' })),
+    relationships: (payload.relationships || []).map(r => ({ ...r, type: uc(r.type) ?? '', dynamic: uc(r.dynamic) ?? '', trajectory: uc(r.trajectory) ?? '' })),
+    expressions: (payload.expressions || []).map(x => ({
+      ...x, content: uc(x.content) ?? '', character: x.character ?? '', act: x.act ?? null,
+      servesPrinciples: x.servesPrinciples ?? [], servesEntity: x.servesEntity ?? '',
+      portability: x.portability ?? 'linguistic', redundancy: x.redundancy ?? 1, note: x.note ?? '',
+    })),
   };
 }
 
