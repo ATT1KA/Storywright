@@ -2863,14 +2863,14 @@ export default function Storywright() {
   }, []);
 
   const handleExport = useCallback(() => {
-    const filename = state.meta.title?.trim() || “storywright”;
+    const filename = state.meta.title?.trim() || "storywright";
     exportOntology(state, filename);
     setFilesStatus(`Exported “${filename}”`);
     setFilesWarnings([]);
   }, [state, exportOntology]);
 
   const handleExportDualTrack = useCallback(() => {
-    const filename = state.meta.title?.trim() || “storywright”;
+    const filename = state.meta.title?.trim() || "storywright";
     const dualTrack = exportWithDualTrack(state);
     exportOntology(dualTrack, `${filename}-v2`);
     setFilesStatus(`Exported dual-track “${filename}-v2”`);
