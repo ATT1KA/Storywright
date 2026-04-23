@@ -1794,7 +1794,7 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
 
 // ─── CONSTELLATION VIEW (improved node legibility) ───────────────────────────
 
-function ConstellationView({ state, selectedEntity, onSelectEntity, selectedPrinciple, onSelectPrinciple }) {
+function ConstellationView({ state, selectedEntity, onSelectEntity, selectedPrinciple, onSelectPrinciple, getDisplay = (k, fallback) => fallback ?? "" }) {
   const t = useT();
   const containerRef = useRef(null);
   const [dims, setDims] = useState({ w: 900, h: 560 });
@@ -1834,7 +1834,10 @@ function ConstellationView({ state, selectedEntity, onSelectEntity, selectedPrin
         state.relationships.filter(r => r.source === selectedEntity || r.target === selectedEntity).forEach(rel => {
           const oId = rel.source === selectedEntity ? rel.target : rel.source;
           const oN = layout.entities.find(e => e.id === oId), sN = layout.entities.find(e => e.id === selectedEntity);
-          if (oN && sN) lines.push({ x1: sN.x, y1: sN.y, x2: oN.x, y2: oN.y, kind: "rel", tension: rel.tension, label: rel.type });
+          if (oN && sN) {
+            const ri = state.relationships.indexOf(rel);
+            lines.push({ x1: sN.x, y1: sN.y, x2: oN.x, y2: oN.y, kind: "rel", tension: rel.tension, label: getDisplay(`relationships[${ri}].type`, rel.type) });
+          }
         });
       }
     }
@@ -1875,7 +1878,8 @@ function ConstellationView({ state, selectedEntity, onSelectEntity, selectedPrin
           const active = selectedPrinciple === p.id || (selectedEntity && state.entities.find(e => e.id === selectedEntity)?.servesPrinciples.includes(p.id));
           const hovered = hoveredNode === p.id;
           const r = 18 + p.redundancy * 1.5;
-          const labelLines = wrapText(p.name, 16);
+          const principleIdx = state.principles.indexOf(p);
+          const labelLines = wrapText(getDisplay(`principles[${principleIdx}].name`, p.name), 16);
           const lineH = 14;
           const pillH = 16 + (labelLines.length - 1) * lineH;
           const pillTop = p.y - r - 22 - (labelLines.length - 1) * lineH;
@@ -1906,7 +1910,8 @@ function ConstellationView({ state, selectedEntity, onSelectEntity, selectedPrin
           const col = e.type === "location" ? t.red : e.type === "faction" ? t.yellow : e.type === "instrument" ? t.green : t.blue;
           const tint = e.type === "location" ? t.redTint : e.type === "faction" ? t.yellowTint : e.type === "instrument" ? t.greenTint : t.blueTint;
           const r = isSel ? 20 : active ? 18 : 16;
-          const labelLines = wrapText(e.name, 14);
+          const entityIdx = state.entities.indexOf(e);
+          const labelLines = wrapText(getDisplay(`entities[${entityIdx}].name`, e.name), 14);
           const lineH = 14;
           const pillH = 16 + (labelLines.length - 1) * lineH;
           const pillTop = e.y + r + 6;
@@ -3134,7 +3139,7 @@ export default function Storywright() {
         }}>
           <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
             {surface === "conversation" && <ConversationPane state={state} dispatch={dispatch} messages={messages} setMessages={setMessages} apiKey={apiKey} />}
-            {surface === "workbench" && view === "constellation" && <ConstellationView state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} selectedPrinciple={selectedPrinciple} onSelectPrinciple={handleSelectPrinciple} />}
+            {surface === "workbench" && view === "constellation" && <ConstellationView state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} selectedPrinciple={selectedPrinciple} onSelectPrinciple={handleSelectPrinciple} getDisplay={getDisplay} />}
             {surface === "workbench" && view === "tension" && <TensionWeb state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} getDisplay={getDisplay} />}
             {surface === "workbench" && view === "arc" && <ArcTimeline state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} dispatch={dispatch} getDisplay={getDisplay} />}
             {surface === "workbench" && view === "layers" && <LayerMap state={state} onSelectEntity={handleSelectEntity} onSelectPrinciple={handleSelectPrinciple} dispatch={dispatch} getDisplay={getDisplay} />}
