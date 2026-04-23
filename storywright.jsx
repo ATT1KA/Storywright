@@ -1678,8 +1678,23 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
     setInput("");
     const userMsg = { role: "user", text, proposals: [] };
     const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
+    // Push a streaming placeholder we'll mutate as deltas arrive.
+    const placeholder = { role: "assistant", text: "", rawText: "", proposals: [], streaming: true };
+    setMessages([...newMessages, placeholder]);
     setLoading(true);
+
+    // Index of the placeholder we'll be mutating. It is the last message.
+    const placeholderIdx = newMessages.length;
+
+    const finishWithError = (errText) => {
+      setMessages(prev => {
+        const next = [...prev];
+        next[placeholderIdx] = { role: "assistant", text: errText, rawText: "", proposals: [], streaming: false, error: true };
+        return next;
+      });
+      setLoading(false);
+    };
+
     try {
       const apiMessages = newMessages.map(m => ({
         role: m.role === "user" ? "user" : "assistant",
@@ -1691,27 +1706,139 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
           "Content-Type": "application/json",
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
         },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, system: SYSTEM_PROMPT + buildContext(state), messages: apiMessages }),
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2000,
+          stream: true,
+          system: SYSTEM_PROMPT + buildContext(state),
+          messages: apiMessages,
+        }),
       });
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (response.status === 401 || response.status === 403) {
-          setMessages(prev => [...prev, { role: "assistant", text: "Invalid API key. Please check your API key in Settings.", rawText: "", proposals: [] }]);
+          finishWithError("Invalid API key. Please check your API key in Settings.");
         } else {
-          setMessages(prev => [...prev, { role: "assistant", text: `API error (${response.status}): ${errorData.error?.message || "Please try again."}`, rawText: "", proposals: [] }]);
+          finishWithError(`API error (${response.status}): ${errorData.error?.message || "Please try again."}`);
         }
-        setLoading(false);
         return;
       }
-      const data = await response.json();
-      const rawText = data.content?.map(b => b.text || "").join("") || "I wasn't able to respond. Please try again.";
-      const { text: cleanText, proposals } = parseProposals(rawText);
-      setMessages(prev => [...prev, { role: "assistant", text: cleanText, rawText, proposals }]);
+      if (!response.body) {
+        finishWithError("Streaming not supported by this browser/runtime.");
+        return;
+      }
+
+      // SSE stream parser. Events look like:
+      //   event: content_block_delta\n
+      //   data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"..."}}\n\n
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let accumulated = "";
+      let interrupted = false;
+
+      const flushAccumulatedToUI = () => {
+        const snapshot = accumulated;
+        setMessages(prev => {
+          const next = [...prev];
+          const cur = next[placeholderIdx] || placeholder;
+          next[placeholderIdx] = { ...cur, text: snapshot, rawText: snapshot, streaming: true, proposals: [] };
+          return next;
+        });
+      };
+
+      // Read loop.
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Split on double newlines — each chunk is a complete SSE event.
+        let sepIdx;
+        while ((sepIdx = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, sepIdx);
+          buffer = buffer.slice(sepIdx + 2);
+          // An event may have multiple "data:" lines per spec; concatenate them.
+          const dataLines = [];
+          for (const line of rawEvent.split("\n")) {
+            if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+          }
+          if (dataLines.length === 0) continue;
+          const dataStr = dataLines.join("\n");
+          if (dataStr === "[DONE]") continue;
+          try {
+            const evt = JSON.parse(dataStr);
+            if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
+              accumulated += evt.delta.text || "";
+              flushAccumulatedToUI();
+            } else if (evt.type === "message_delta" && evt.delta?.stop_reason) {
+              // end-of-message — handled outside the loop
+            } else if (evt.type === "error") {
+              interrupted = true;
+              const msg = evt.error?.message || "Stream error";
+              setMessages(prev => {
+                const next = [...prev];
+                const cur = next[placeholderIdx] || placeholder;
+                next[placeholderIdx] = { ...cur, text: (accumulated || "") + `\n\n[stream error: ${msg}]`, rawText: accumulated, streaming: false, error: true, proposals: [] };
+                return next;
+              });
+            }
+          } catch (parseErr) {
+            // Ignore malformed event; continue streaming.
+          }
+        }
+      }
+
+      // Stream complete. Now parse proposals from the full accumulated text.
+      const finalRaw = accumulated || "I wasn't able to respond. Please try again.";
+      const { text: cleanText, proposals } = parseProposals(finalRaw);
+      setMessages(prev => {
+        const next = [...prev];
+        const cur = next[placeholderIdx] || placeholder;
+        next[placeholderIdx] = {
+          ...cur,
+          text: cleanText,
+          rawText: finalRaw,
+          proposals,
+          streaming: false,
+          error: interrupted ? true : false,
+        };
+        return next;
+      });
     } catch (err) {
-      setMessages(prev => [...prev, { role: "assistant", text: "Connection error — couldn't reach the API. You can still use the Workbench to edit the ontology directly.", rawText: "", proposals: [] }]);
+      // Network failure or aborted mid-stream — surface what we received, if anything.
+      setMessages(prev => {
+        const next = [...prev];
+        const cur = next[placeholderIdx];
+        const partial = cur?.rawText || "";
+        if (partial) {
+          next[placeholderIdx] = {
+            role: "assistant",
+            text: partial + "\n\n[connection interrupted]",
+            rawText: partial,
+            proposals: [],
+            streaming: false,
+            error: true,
+          };
+        } else {
+          next[placeholderIdx] = {
+            role: "assistant",
+            text: "Connection error — couldn't reach the API. You can still use the Workbench to edit the ontology directly.",
+            rawText: "",
+            proposals: [],
+            streaming: false,
+            error: true,
+          };
+        }
+        return next;
+      });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [input, loading, messages, state, setMessages, apiKey]);
 
   return (
@@ -1737,11 +1864,30 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
             </div>
             <div style={{
               padding: "12px 16px", borderRadius: "6px", lineHeight: 1.7, fontSize: "13px",
-              fontFamily: "var(--font-work)", color: t.textWork, whiteSpace: "pre-wrap",
+              fontFamily: "var(--font-work)", color: msg.error ? t.red : t.textWork, whiteSpace: "pre-wrap",
               background: msg.role === "user" ? t.bgCanvas : t.bgPane,
-              border: `1px solid ${t.borderBezel}`,
+              border: `1px solid ${msg.error ? t.red : t.borderBezel}`,
             }}>
-              {msg.text}
+              {msg.streaming && !msg.text ? (
+                <span style={{ color: t.textUiLight, fontSize: "13px", fontStyle: "italic", display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                  <span className="sw-pulse-dot" style={{
+                    display: "inline-block", width: "6px", height: "6px", borderRadius: "50%",
+                    background: t.blue, animation: "swPulse 1.1s ease-in-out infinite",
+                  }} />
+                  Claude is thinking…
+                </span>
+              ) : (
+                <>
+                  {msg.text}
+                  {msg.streaming && (
+                    <span className="sw-streaming-caret" style={{
+                      display: "inline-block", width: "6px", height: "13px", marginLeft: "2px",
+                      background: t.blue, verticalAlign: "text-bottom", opacity: 0.7,
+                      animation: "swPulse 1.1s ease-in-out infinite",
+                    }} />
+                  )}
+                </>
+              )}
             </div>
             {msg.proposals?.map((p, pi) => (
               <ProposalCard key={p.id} proposal={p}
@@ -1750,14 +1896,7 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
             ))}
           </div>
         ))}
-        {loading && (
-          <div style={{ marginBottom: "20px" }}>
-            <div style={{ fontSize: "10px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 500, marginBottom: "4px" }}>Storywright</div>
-            <div style={{ padding: "12px 16px", borderRadius: "6px", background: t.bgPane, border: `1px solid ${t.borderBezel}` }}>
-              <span style={{ color: t.textUiLight, fontSize: "13px", fontFamily: "var(--font-work)", fontStyle: "italic" }}>Thinking…</span>
-            </div>
-          </div>
-        )}
+        <style>{`@keyframes swPulse { 0%,100% { opacity: 0.25 } 50% { opacity: 1 } }`}</style>
       </div>
       <div style={{ borderTop: `1px solid ${t.borderBezel}`, padding: "14px 20px", background: t.bgPane, flexShrink: 0 }}>
         <div style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}>
