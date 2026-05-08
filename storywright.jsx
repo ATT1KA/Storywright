@@ -5,6 +5,7 @@ import { getEditMode, getFieldHint } from "./src/ontology/editMode.js";
 import { runFullValidation } from "./src/ontology/validate.js";
 import { buildSystemPromptAddendum } from "./src/ontology/llmContext.js";
 import { prepareApiPayload, estimatePayload, usageStatus, formatTokens, SOFT_LIMIT } from "./src/ontology/contextBudget.js";
+import { saveProjectToFile, loadProjectFromFile, hasFileSystemAccess } from "./src/persistence/filePersistence.js";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STORYWRIGHT v0.5 — High-Contrast Tactile Writing Environment + Dark Mode
@@ -1401,6 +1402,8 @@ function FilesMenu({
   warnings,
   onImport,
   onSave,
+  onSaveToFile,
+  onOpenFromFile,
   onExportCurrent,
   onExportDualTrack,
   onLoadProject,
@@ -1520,52 +1523,83 @@ function FilesMenu({
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: "8px" }}>
-        <button onClick={onImport} style={{
-          flex: 1,
-          fontSize: "11px",
-          padding: "8px 0",
-          borderRadius: "4px",
-          border: `1px solid ${t.borderBezel}`,
-          background: "transparent",
-          color: t.textUi,
-          cursor: "pointer",
-          fontFamily: "var(--font-ui)",
-        }}>Import</button>
-        <button onClick={onSave} style={{
-          flex: 1,
-          fontSize: "11px",
-          padding: "8px 0",
-          borderRadius: "4px",
-          border: `1px solid ${t.borderBezel}`,
-          background: t.bgActive,
-          color: t.textUiStrong,
-          cursor: "pointer",
-          fontFamily: "var(--font-ui)",
-          fontWeight: 600,
-        }}>Save</button>
-        <button onClick={onExportCurrent} style={{
-          flex: 1,
-          fontSize: "11px",
-          padding: "8px 0",
-          borderRadius: "4px",
-          border: `1px solid ${t.borderBezel}`,
-          background: "transparent",
-          color: t.textUi,
-          cursor: "pointer",
-          fontFamily: "var(--font-ui)",
-        }}>Export</button>
-        <button onClick={onExportDualTrack} style={{
-          flex: 1,
-          fontSize: "11px",
-          padding: "8px 0",
-          borderRadius: "4px",
-          border: `1px solid ${t.borderBezel}`,
-          background: "transparent",
-          color: t.textUi,
-          cursor: "pointer",
-          fontFamily: "var(--font-ui)",
-        }}>Export V2</button>
+      <div>
+        <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "6px" }}>FILE</div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button onClick={onOpenFromFile} style={{
+            flex: 1,
+            fontSize: "11px",
+            padding: "8px 0",
+            borderRadius: "4px",
+            border: `1px solid ${t.borderBezel}`,
+            background: "transparent",
+            color: t.textUi,
+            cursor: "pointer",
+            fontFamily: "var(--font-ui)",
+          }}>Open</button>
+          <button onClick={onSaveToFile} style={{
+            flex: 1,
+            fontSize: "11px",
+            padding: "8px 0",
+            borderRadius: "4px",
+            border: `1px solid ${t.borderBezel}`,
+            background: t.bgActive,
+            color: t.textUiStrong,
+            cursor: "pointer",
+            fontFamily: "var(--font-ui)",
+            fontWeight: 600,
+          }}>Save As</button>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: "9px", color: t.textUiLight, fontFamily: "var(--font-ui)", fontWeight: 600, letterSpacing: "1.5px", marginBottom: "6px" }}>SESSION</div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button onClick={onImport} style={{
+            flex: 1,
+            fontSize: "11px",
+            padding: "8px 0",
+            borderRadius: "4px",
+            border: `1px solid ${t.borderBezel}`,
+            background: "transparent",
+            color: t.textUi,
+            cursor: "pointer",
+            fontFamily: "var(--font-ui)",
+          }}>Import</button>
+          <button onClick={onSave} style={{
+            flex: 1,
+            fontSize: "11px",
+            padding: "8px 0",
+            borderRadius: "4px",
+            border: `1px solid ${t.borderBezel}`,
+            background: "transparent",
+            color: t.textUi,
+            cursor: "pointer",
+            fontFamily: "var(--font-ui)",
+          }}>Save</button>
+          <button onClick={onExportCurrent} style={{
+            flex: 1,
+            fontSize: "11px",
+            padding: "8px 0",
+            borderRadius: "4px",
+            border: `1px solid ${t.borderBezel}`,
+            background: "transparent",
+            color: t.textUi,
+            cursor: "pointer",
+            fontFamily: "var(--font-ui)",
+          }}>Export</button>
+          <button onClick={onExportDualTrack} style={{
+            flex: 1,
+            fontSize: "11px",
+            padding: "8px 0",
+            borderRadius: "4px",
+            border: `1px solid ${t.borderBezel}`,
+            background: "transparent",
+            color: t.textUi,
+            cursor: "pointer",
+            fontFamily: "var(--font-ui)",
+          }}>Export V2</button>
+        </div>
       </div>
     </div>
   );
@@ -3094,10 +3128,15 @@ export default function Storywright() {
   const handleSelectEntity = useCallback(id => { setSelectedEntity(id); setSelectedPrinciple(null); }, []);
   const handleSelectPrinciple = useCallback(id => { setSelectedPrinciple(id); setSelectedEntity(null); }, []);
 
+  const saveToFileRef = useRef(null);
+  const openFromFileRef = useRef(null);
+
   useEffect(() => {
     const handler = e => {
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); dispatch({ type: "UNDO" }); }
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) { e.preventDefault(); dispatch({ type: "REDO" }); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "s" && !e.shiftKey) { e.preventDefault(); saveToFileRef.current?.(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "o" && !e.shiftKey) { e.preventDefault(); openFromFileRef.current?.(); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -3157,6 +3196,65 @@ export default function Storywright() {
     setFilesStatus(`Exported “${entry.name}”`);
     setFilesWarnings([]);
   }, [projects, exportOntology]);
+
+  const handleSaveToFile = useCallback(async () => {
+    try {
+      const snapshot = cloneState(state);
+      const suggestedName = state.meta.title?.trim() || "storywright-project";
+      const result = await saveProjectToFile(snapshot, suggestedName);
+      if (result) {
+        setFilesStatus(`Saved to disk: "${result.name}"`);
+        setFilesWarnings([]);
+        setFilesMenuOpen(false);
+      }
+    } catch (err) {
+      console.error("Save to file failed:", err);
+      setFilesStatus("Save to file failed");
+      setFilesWarnings([err.message]);
+    }
+  }, [state]);
+
+  const handleOpenFromFile = useCallback(async () => {
+    try {
+      const result = await loadProjectFromFile();
+      if (!result) return; // user cancelled
+      const parsed = parseAndValidateOntology(result.data);
+      if (parsed.state) {
+        const snapshot = cloneState(parsed.state);
+        dispatch({ type: "LOAD_STATE", state: snapshot });
+        setMessages([]);
+        setFeedbackHistory([]);
+        setSelectedEntity(null);
+        setSelectedPrinciple(null);
+        if (parsed.warnings.length > 0) {
+          console.warn("Open file warnings:", parsed.warnings);
+        }
+        if (parsed.errors.length > 0) {
+          alert(`Opened with validation issues:\n- ${parsed.errors.join("\n- ")}`);
+        }
+        const fileLabel = result.name || "Opened file";
+        const inferredName = parsed.state?.meta?.title?.trim() || fileLabel.replace(/\.json$/i, "") || deriveProjectName();
+        saveProject({ name: inferredName, state: snapshot, sourceName: fileLabel, kind: "import" });
+        setFilesStatus(`Opened "${fileLabel}"`);
+        setFilesWarnings(parsed.warnings || []);
+        setCurrentSourceName(fileLabel);
+        setFilesMenuOpen(false);
+      } else {
+        const details = parsed.errors.length > 0 ? `\n\n${parsed.errors.join("\n")}` : "";
+        alert("Invalid file format. Please open a Story Bible JSON or Storywright ontology JSON." + details);
+        setFilesStatus("Open failed");
+        setFilesWarnings(parsed.errors || []);
+      }
+    } catch (err) {
+      alert("Error reading file: " + err.message);
+      setFilesStatus("Open failed");
+      setFilesWarnings([]);
+    }
+  }, [dispatch, saveProject]);
+
+  // Keep keyboard-shortcut refs in sync with latest handlers
+  useEffect(() => { saveToFileRef.current = handleSaveToFile; }, [handleSaveToFile]);
+  useEffect(() => { openFromFileRef.current = handleOpenFromFile; }, [handleOpenFromFile]);
 
   const handleImport = useCallback(() => {
     const input = document.createElement("input"); input.type = "file"; input.accept = ".json";
@@ -3309,6 +3407,8 @@ export default function Storywright() {
           warnings={filesWarnings}
           onImport={handleImport}
           onSave={handleSaveProjectSnapshot}
+          onSaveToFile={handleSaveToFile}
+          onOpenFromFile={handleOpenFromFile}
           onExportCurrent={handleExport}
           onExportDualTrack={handleExportDualTrack}
           onLoadProject={handleLoadProject}
