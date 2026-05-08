@@ -4,6 +4,7 @@ import { exportWithDualTrack } from "./src/ontology/exportDualTrack.js";
 import { getEditMode, getFieldHint } from "./src/ontology/editMode.js";
 import { runFullValidation } from "./src/ontology/validate.js";
 import { buildSystemPromptAddendum } from "./src/ontology/llmContext.js";
+import { prepareApiPayload, estimatePayload, usageStatus, formatTokens, SOFT_LIMIT } from "./src/ontology/contextBudget.js";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STORYWRIGHT v0.5 — High-Contrast Tactile Writing Environment + Dark Mode
@@ -1060,6 +1061,17 @@ function buildContext(state) {
   return ctx;
 }
 
+// ─── FEEDBACK CONTEXT ────────────────────────────────────────────────────────
+// Formats recent accept/reject decisions into a compact context string for the
+// system prompt, giving Claude signal about what the user wants without explicit
+// instruction. Capped at 10 most recent to avoid context bloat.
+function buildFeedbackContext(feedbackHistory) {
+  if (!feedbackHistory || feedbackHistory.length === 0) return "";
+  const recent = feedbackHistory.slice(-10);
+  const items = recent.map(f => `${f.action}: ${f.type} "${f.label}"`).join(", ");
+  return `\n\nRECENT PROPOSAL DECISIONS (use these to calibrate your proposals — lean into patterns the user accepts, avoid patterns they decline):\n[${items}]`;
+}
+
 const SYSTEM_PROMPT = `You are a creative collaborator in Storywright, an ontological narrative development environment. You help users develop stories through conversation. You are a creative peer — intellectually engaged, willing to push back on weak ideas, respectful of the user's creative authority.
 
 YOUR ROLE:
@@ -1633,13 +1645,84 @@ function ProposalCard({ proposal, onAccept, onReject }) {
   );
 }
 
+// ─── CONTEXT METER ───────────────────────────────────────────────────────────
+//
+// Compact bar + numeric readout above the input. Shows how much of the soft
+// budget the next request will use, plus a notice if older history was trimmed
+// from the most recent send. The threshold colors come from usageStatus().
+
+function ContextMeter({ usage, lastUsage, t, messageCount }) {
+  if (!usage) return null;
+  const ratio = Math.min(1, usage.total / Math.max(1, usage.softLimit));
+  const status = usageStatus(ratio);
+  const barColor = status === "hot" ? t.red : status === "warn" ? t.yellow : t.blue;
+  const trimmedNotice = lastUsage && lastUsage.dropped > 0
+    ? `${lastUsage.dropped} earlier message${lastUsage.dropped === 1 ? "" : "s"} trimmed from last send`
+    : null;
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: "10px",
+      marginBottom: "8px", fontFamily: "var(--font-ui)",
+      fontSize: "10px", color: t.textUiLight, letterSpacing: "0.3px",
+    }}>
+      <div style={{
+        flex: 1, height: "3px", background: t.bgCanvas, borderRadius: "2px", overflow: "hidden",
+        border: `1px solid ${t.borderBezel}`,
+      }}>
+        <div style={{
+          width: `${(ratio * 100).toFixed(1)}%`,
+          height: "100%", background: barColor,
+          transition: "width 120ms linear, background 120ms linear",
+        }} />
+      </div>
+      <span style={{ whiteSpace: "nowrap", color: status === "hot" ? t.red : t.textUiLight }}>
+        {formatTokens(usage.total)} / {formatTokens(usage.softLimit)} ctx
+      </span>
+      <span style={{ whiteSpace: "nowrap", color: t.textUiGhost }}>
+        · {messageCount} msg{messageCount === 1 ? "" : "s"}
+      </span>
+      {trimmedNotice && (
+        <span style={{ whiteSpace: "nowrap", color: t.yellow, fontStyle: "italic" }}>
+          · {trimmedNotice}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ─── CONVERSATION SURFACE ────────────────────────────────────────────────────
 
-function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
+function ConversationPane({ state, dispatch, messages, setMessages, apiKey, feedbackHistory, setFeedbackHistory }) {
   const t = useT();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  // lastUsage holds the token-budget summary returned from the most recent
+  // send. We also compute a live estimate as the user types so the meter
+  // reflects the cost of the next request, not just the previous one.
+  const [lastUsage, setLastUsage] = useState(null);
   const scrollRef = useRef(null);
+
+  // Live estimate: what the next API call would cost if sent right now.
+  // Cheap enough (chars/4) to recompute on every keystroke against the
+  // working transcript — buildContext is the only heavy bit and React's
+  // memo on `state` handles the change detection.
+  const liveUsage = useMemo(() => {
+    const fullSystem = SYSTEM_PROMPT + buildContext(state) + buildFeedbackContext(feedbackHistory);
+    const apiMessages = messages.map(m => ({
+      role: m.role === "user" ? "user" : "assistant",
+      content: m.role === "user" ? m.text : (m.rawText || m.text),
+    }));
+    if (input.trim()) {
+      apiMessages.push({ role: "user", content: input });
+    }
+    const est = estimatePayload({ system: fullSystem, messages: apiMessages });
+    return {
+      systemTokens: est.systemTokens,
+      messageTokens: est.messageTokens,
+      total: est.total,
+      softLimit: SOFT_LIMIT,
+    };
+  }, [state, messages, input, feedbackHistory]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -1656,7 +1739,11 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
     const proposal = messages[msgIdx].proposals[propIdx];
     const actions = proposalToActions(proposal, state);
     if (actions.length > 0) dispatch({ type: "BATCH_UPDATE", operations: actions });
-  }, [messages, state, dispatch, setMessages]);
+    // Record feedback decision for context loop
+    const d = proposal.data;
+    const label = d.name || d.title || d.content?.slice(0, 40) || proposal.type;
+    setFeedbackHistory(prev => [...prev.slice(-9), { proposalId: proposal.id, action: "accepted", type: proposal.type, label, timestamp: Date.now() }]);
+  }, [messages, state, dispatch, setMessages, setFeedbackHistory]);
 
   const handleRejectProposal = useCallback((msgIdx, propIdx) => {
     setMessages(prev => {
@@ -1666,7 +1753,14 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
       updated[msgIdx] = msg;
       return updated;
     });
-  }, [setMessages]);
+    // Record feedback decision for context loop
+    const proposal = messages[msgIdx]?.proposals[propIdx];
+    if (proposal) {
+      const d = proposal.data;
+      const label = d.name || d.title || d.content?.slice(0, 40) || proposal.type;
+      setFeedbackHistory(prev => [...prev.slice(-9), { proposalId: proposal.id, action: "rejected", type: proposal.type, label, timestamp: Date.now() }]);
+    }
+  }, [messages, setMessages, setFeedbackHistory]);
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -1700,6 +1794,15 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
         role: m.role === "user" ? "user" : "assistant",
         content: m.role === "user" ? m.text : (m.rawText || m.text),
       }));
+      const fullSystem = SYSTEM_PROMPT + buildContext(state) + buildFeedbackContext(feedbackHistory);
+      // Apply sliding-window truncation so a long-running conversation can't
+      // silently overflow the model's context window. The latest user turn is
+      // always preserved; older turns are dropped from the head as needed.
+      const prepared = prepareApiPayload({ system: fullSystem, messages: apiMessages });
+      setLastUsage(prepared.usage);
+      if (prepared.usage.dropped > 0) {
+        console.info(`[storywright] context trim: dropped ${prepared.usage.dropped} earlier message(s) (~${prepared.usage.droppedTokens} tokens) to fit budget.`);
+      }
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -1712,8 +1815,8 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
           model: "claude-sonnet-4-20250514",
           max_tokens: 2000,
           stream: true,
-          system: SYSTEM_PROMPT + buildContext(state),
-          messages: apiMessages,
+          system: prepared.system,
+          messages: prepared.messages,
         }),
       });
 
@@ -1839,7 +1942,7 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, state, setMessages, apiKey]);
+  }, [input, loading, messages, state, setMessages, apiKey, feedbackHistory]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: t.bgCanvas }}>
@@ -1899,6 +2002,7 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey }) {
         <style>{`@keyframes swPulse { 0%,100% { opacity: 0.25 } 50% { opacity: 1 } }`}</style>
       </div>
       <div style={{ borderTop: `1px solid ${t.borderBezel}`, padding: "14px 20px", background: t.bgPane, flexShrink: 0 }}>
+        <ContextMeter usage={liveUsage} lastUsage={lastUsage} t={t} messageCount={messages.length} />
         <div style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}>
           <textarea value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
@@ -2913,6 +3017,7 @@ export default function Storywright() {
   const [selectedPrinciple, setSelectedPrinciple] = useState(null);
   const [showMeta, setShowMeta] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [feedbackHistory, setFeedbackHistory] = useState([]);
   const [isDark, setIsDark] = useState(true);
   const [apiKey, setApiKey] = useState(() => {
     try {
@@ -3036,6 +3141,7 @@ export default function Storywright() {
     const snapshot = cloneState(entry.state);
     dispatch({ type: "LOAD_STATE", state: snapshot });
     setMessages([]);
+    setFeedbackHistory([]);
     setSelectedEntity(null);
     setSelectedPrinciple(null);
     setFilesStatus(`Loaded “${entry.name}”`);
@@ -3065,6 +3171,7 @@ export default function Storywright() {
             const snapshot = cloneState(parsed.state);
             dispatch({ type: "LOAD_STATE", state: snapshot });
             setMessages([]);
+            setFeedbackHistory([]);
             setSelectedEntity(null);
             setSelectedPrinciple(null);
             if (parsed.warnings.length > 0) {
@@ -3100,6 +3207,7 @@ export default function Storywright() {
   const handleNew = useCallback(() => {
     dispatch({ type: "LOAD_STATE", state: EMPTY });
     setMessages([]);
+    setFeedbackHistory([]);
     setSurface("conversation");
     setSelectedEntity(null);
     setSelectedPrinciple(null);
@@ -3277,7 +3385,7 @@ export default function Storywright() {
           boxSizing: "border-box"
         }}>
           <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
-            {surface === "conversation" && <ConversationPane state={state} dispatch={dispatch} messages={messages} setMessages={setMessages} apiKey={apiKey} />}
+            {surface === "conversation" && <ConversationPane state={state} dispatch={dispatch} messages={messages} setMessages={setMessages} apiKey={apiKey} feedbackHistory={feedbackHistory} setFeedbackHistory={setFeedbackHistory} />}
             {surface === "workbench" && view === "constellation" && <ConstellationView state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} selectedPrinciple={selectedPrinciple} onSelectPrinciple={handleSelectPrinciple} getDisplay={getDisplay} />}
             {surface === "workbench" && view === "tension" && <TensionWeb state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} getDisplay={getDisplay} />}
             {surface === "workbench" && view === "arc" && <ArcTimeline state={state} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} dispatch={dispatch} getDisplay={getDisplay} />}
