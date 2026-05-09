@@ -1,12 +1,20 @@
 {
   "name": "storywright",
   "version": "0.5.0",
+  "private": true,
   "type": "module",
+  "description": "A collaborative story development environment where a human and an LLM build stories together through conversation.",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
+    "setup": "bash scripts/setup.sh",
+    "start": "vite",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "validate:bible": "node scripts/validate-bible.js",
+    "test": "npm run test:clamp && npm run test:validate && npm run test:context-budget",
     "test:clamp": "node scripts/test-clamp.js",
     "test:validate": "node scripts/test-validate.js",
     "test:context-budget": "node scripts/test-context-budget.js"

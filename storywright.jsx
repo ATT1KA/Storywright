@@ -5,7 +5,7 @@ import { getEditMode, getFieldHint } from "./src/ontology/editMode.js";
 import { runFullValidation } from "./src/ontology/validate.js";
 import { buildSystemPromptAddendum } from "./src/ontology/llmContext.js";
 import { prepareApiPayload, estimatePayload, usageStatus, formatTokens, SOFT_LIMIT } from "./src/ontology/contextBudget.js";
-import { saveProjectToFile, loadProjectFromFile, hasFileSystemAccess } from "./src/persistence/filePersistence.js";
+import { saveProjectToFile, loadProjectFromFile } from "./src/persistence/filePersistence.js";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STORYWRIGHT v0.5 — High-Contrast Tactile Writing Environment + Dark Mode
@@ -1846,7 +1846,7 @@ function ConversationPane({ state, dispatch, messages, setMessages, apiKey, feed
           "anthropic-dangerous-direct-browser-access": "true",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-5",
           max_tokens: 2000,
           stream: true,
           system: prepared.system,
@@ -2928,10 +2928,11 @@ function Inspector({ state, selectedEntity, selectedPrinciple, dispatch, onSelec
 
 // ─── API KEY MODAL ────────────────────────────────────────────────────────────
 
-function ApiKeyModal({ onSave, onCancel, initialKey = "" }) {
+function ApiKeyModal({ onSave, onCancel, onClear, initialKey = "" }) {
   const t = useT();
   const [key, setKey] = useState(initialKey);
   const [error, setError] = useState("");
+  const hasExistingKey = Boolean(initialKey);
 
   const handleSave = () => {
     const trimmed = key.trim();
@@ -2986,7 +2987,16 @@ function ApiKeyModal({ onSave, onCancel, initialKey = "" }) {
         <div style={{ fontSize: "11px", color: t.textUiLight, fontFamily: "var(--font-ui)", marginBottom: "16px" }}>
           Get your API key at <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style={{ color: t.blue, textDecoration: "none" }}>console.anthropic.com</a>
         </div>
-        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", alignItems: "center" }}>
+          {hasExistingKey && onClear && (
+            <button onClick={onClear} style={{
+              padding: "8px 12px", fontSize: "11px", fontFamily: "var(--font-ui)", fontWeight: 500,
+              background: "transparent", color: t.red, border: `1px solid ${t.borderBezel}`, borderRadius: "4px",
+              cursor: "pointer", marginRight: "auto",
+            }} title="Remove the stored API key from this browser">
+              Clear stored key
+            </button>
+          )}
           <button onClick={onCancel} style={{
             padding: "8px 16px", fontSize: "11px", fontFamily: "var(--font-ui)", fontWeight: 500,
             background: "transparent", color: t.textUi, border: `1px solid ${t.borderBezel}`, borderRadius: "4px",
@@ -3036,7 +3046,7 @@ const VIEWS = [
   { id: "arc", label: "Arc Timeline", icon: "▸" },
   { id: "layers", label: "Layer Map", icon: "≡" },
   { id: "coherence", label: "Coherence", icon: "◈" },
-  { id: "compendium", label: "Compendium", icon: "📖" },
+  { id: "compendium", label: "Compendium", icon: "▤" },
 ];
 
 export default function Storywright() {
@@ -3119,7 +3129,7 @@ export default function Storywright() {
     try {
       localStorage.removeItem("STORYWRIGHT_API_KEY");
       setApiKey("");
-      setShowApiKeyModal(true);
+      setShowApiKeyModal(false);
     } catch (err) {
       console.error("Failed to clear API key:", err);
     }
@@ -3334,7 +3344,6 @@ export default function Storywright() {
         width: "100%", height: "100vh", display: "flex", flexDirection: "column",
         background: theme.bgCanvas, color: theme.textUiStrong, fontFamily: "var(--font-ui)", overflow: "hidden",
         transition: "background 0.3s, color 0.3s",
-        minWidth: "1200px",
         margin: 0,
         padding: 0,
         border: "none",
@@ -3465,6 +3474,7 @@ export default function Storywright() {
           <ApiKeyModal
             initialKey={apiKey}
             onSave={handleSaveApiKey}
+            onClear={handleClearApiKey}
             onCancel={() => {
               setShowApiKeyModal(false);
               if (!apiKey) {
@@ -3475,13 +3485,12 @@ export default function Storywright() {
         )}
 
         {/* MAIN CONTENT */}
-        <div style={{ 
-          display: "flex", 
-          flex: 1, 
-          overflow: "hidden", 
-          paddingLeft: "clamp(40px, 10vw, 200px)",
+        <div style={{
+          display: "flex",
+          flex: 1,
+          overflow: "hidden",
+          paddingLeft: "clamp(20px, 8vw, 200px)",
           paddingRight: "0",
-          minWidth: "1200px",
           boxSizing: "border-box"
         }}>
           <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>

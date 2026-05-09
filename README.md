@@ -1,66 +1,97 @@
 # Storywright
 
-A collaborative story development environment where a human and an LLM build stories together through conversation, with an ontological storage layer and visualization/manipulation surfaces.
+A collaborative story development environment where a human and an LLM build stories together through conversation, backed by an ontological storage layer with deterministic visualization and editing surfaces.
 
 ## Quick Start
 
-### Local Development
+### Prerequisites
 
-1. Install dependencies:
+- **Node.js 18+** ([install](https://nodejs.org) or `brew install node`)
+- **npm** (ships with Node)
+- **An Anthropic API key** for the conversation features ([console.anthropic.com](https://console.anthropic.com)) — entered in-app, stored only in your browser
+
+### One-command setup
+
 ```bash
-npm install
+npm run setup
 ```
 
-2. Start the development server:
+This checks prerequisites, installs dependencies, and verifies the install. Equivalent: `bash scripts/setup.sh` or `make setup`.
+
+### First run
+
 ```bash
 npm run dev
 ```
 
-3. Open your browser to the URL shown (typically `http://localhost:5173`)
+Open the URL it prints (typically `http://localhost:5173`).
 
-4. Enter your Anthropic API key when prompted (or click "Settings" in the header)
+On first launch the app prompts for your Anthropic API key. The key is stored in `localStorage` on your device and only ever sent to `api.anthropic.com`. You can dismiss the prompt and use the Workbench surfaces to edit the ontology directly without an API key.
 
-### Getting an Anthropic API Key
+## Common commands
 
-1. Go to [console.anthropic.com](https://console.anthropic.com)
-2. Sign up or log in
-3. Navigate to API Keys section
-4. Create a new API key
-5. Copy the key and paste it into Storywright when prompted
+The project ships a `Makefile` and matching `npm` scripts. Pick whichever you prefer.
 
-**Important:** Your API key is stored locally in your browser's localStorage. It never leaves your device.
+| Task | npm | make |
+| --- | --- | --- |
+| Set up from scratch | `npm run setup` | `make setup` |
+| Start the dev server | `npm run dev` | `make dev` |
+| Build for production | `npm run build` | `make build` |
+| Preview the production build | `npm run preview` | `make preview` |
+| Run all tests | `npm test` | `make test` |
+| Validate constraint registry | `npm run validate:bible` | `make validate` |
+| Remove `dist/` | — | `make clean` |
+| Wipe `dist/` and `node_modules/` | — | `make reset` |
 
-### Building for Production
+Run `make help` to see the full list with descriptions.
 
-```bash
-npm run build
+## Configuration
+
+Storywright is configured entirely in-app — there are no required environment variables for local development or deployment. See [.env.example](.env.example) if you want to wire an API key for tests or automated runs (the in-app prompt is the recommended path).
+
+## Project structure
+
 ```
-
-The built files will be in the `dist/` directory.
-
-### Deploying to Vercel
-
-1. Push your code to a GitHub repository
-2. Go to [vercel.com](https://vercel.com) and sign in
-3. Click "New Project"
-4. Import your GitHub repository
-5. Vercel will auto-detect the Vite configuration
-6. Click "Deploy"
-
-No environment variables need to be configured - users will enter their API keys through the UI.
+storywright.jsx              Main application (single React component, ~3.5k lines)
+src/
+  main.jsx                   Vite entry point
+  ontology/                  Ontology data model, validators, clamp/display logic
+  persistence/               File System Access API persistence helpers
+scripts/
+  setup.sh                   One-command setup
+  test-*.js                  Test runners (no test framework dependency)
+  validate-bible.js          Constraint-registry validator
+public/data/ontologies/      Sample ontologies loaded at startup
+docs/                        Format documentation
+```
 
 ## Features
 
-- **Conversation Surface**: Collaborate with an LLM on story development
-- **Workbench**: Five visualization/editing views (Constellation, Tension Web, Arc Timeline, Layer Map, Coherence)
-- **Inspector**: Context-sensitive property editor
-- **Dark Mode**: Full dual-theme support
-- **Undo/Redo**: 50-step history with keyboard shortcuts (Cmd+Z / Cmd+Shift+Z)
-- **Export/Import**: JSON-based project persistence
+- **Conversation Surface** — collaborate with an LLM that proposes additions/edits to your ontology, with per-proposal accept/decline.
+- **Workbench** — six visualization/editing views: Constellation, Tension Web, Arc Timeline, Layer Map, Coherence, Compendium.
+- **Inspector** — context-sensitive property editor for any selected entity, principle, relationship, or expression.
+- **Dual-track text** — every authored field has a canonical (full prose for the LLM) and a derived display (deterministically clamped to the UI surface).
+- **Undo/Redo** — 50-step history (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z).
+- **File persistence** — Save to disk (Cmd/Ctrl+S), Open from disk (Cmd/Ctrl+O), or use the in-browser Files menu for local snapshots.
+- **Dark/light mode** — toggle in the header.
 
-## Project Status
+## Deploying
 
-v0.5 - Fully functional prototype. Ready for demo deployment.
+### Vercel
+
+The repo includes a `vercel.json` and Vite is auto-detected.
+
+1. Push to GitHub, GitLab, or Bitbucket.
+2. Import the repo at [vercel.com](https://vercel.com).
+3. Click Deploy. No environment variables required — users enter their own API key.
+
+### Static host
+
+`npm run build` produces a fully static bundle in `dist/`. Drop it on any static host (Netlify, Cloudflare Pages, S3+CloudFront, etc.). Nothing on the server needs to know about Anthropic.
+
+## Project status
+
+v0.5 — fully functional prototype, ready for demo deployment.
 
 ## License
 
