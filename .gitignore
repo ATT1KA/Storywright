@@ -27,3 +27,10 @@ npm-debug.log*
 # Ontology data (transient)
 public/data/cache/
 public/data/exports/
+
+# Claude Code workspace
+.claude/
+
+# Vite HMR transient timestamps
+vite.config.js.timestamp-*.mjs
+vite.config.*.timestamp-*.mjs
